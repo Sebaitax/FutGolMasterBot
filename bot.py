@@ -3,8 +3,8 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import os
 
-from database import funciones as f
-
+# from database import funciones as f
+from models import userModel
 
 intents = discord.Intents.default()
 intents.message_content = True  # Necesario para acceder al contenido de los mensajes
@@ -17,29 +17,30 @@ async def bot_conect():
 
 @bot.command()
 async def ayuda(ctx):
-    await ctx.send("¡Hola! Soy FutGolMasterBot. Usa `!start` para comenzar.")
+    await ctx.send("""¡Hola! Soy FutGolMasterBot, a continucación obtendras la lista de comandos:\n
+Inicio: -start 
+Ver usuario: -u
+                   """)
     
 @bot.command()
 async def start(ctx):
-    await ctx.send("¡Bienvenido al FutGolMasterBot! Usa `!collect` para ver tus cartas.")
-    usuario_ex = False
-    if usuario_ex:
-        f.obtener_usuario()
-    else:
-        f.crear_usuario()
+    await ctx.send("¡Bienvenido al FutGolMasterBot! Usa `-collect` para ver tus cartas.")
 
 
+@bot.command(name="u")
+async def u(ctx, member: discord.Member = None):
+    member = member or ctx.author
 
-
-@bot.command()
-async def ver_inventario(ctx):
-    await ctx.send("Aquí está tu inventario de cartas.")
-
-@bot.command()
-async def crear_plantilla(ctx, nombre, *jugadores):
-    await ctx.send(f"Plantilla {nombre} creada con los jugadores: {', '.join(jugadores)}")
-
-
+    
+    usuario = userModel.User(
+        user_id=member.id,
+        nombre=member.name,
+        global_name=member.global_name,
+        avatar_url=member.avatar.url,
+        fecha_union=member.joined_at
+        )
+    
+    await ctx.send(usuario.mostrar_info())
 load_dotenv()
 
 token = os.getenv('TOKEN') 
