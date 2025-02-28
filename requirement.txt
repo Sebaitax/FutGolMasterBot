@@ -1,2 +1,4 @@
-discord.py
+nextcord
+pillow
+requests
 python-dotenv
