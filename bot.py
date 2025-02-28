@@ -10,6 +10,7 @@ intents = nextcord.Intents.default()
 intents.message_content = True
 intents.members = True
 
+
 bot = commands.Bot(intents=intents)
 
 @bot.event
