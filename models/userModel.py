@@ -3,7 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 import requests
 class User:
-    def __init__(self, user_id, nombre, avatar_url,saldo,cartas,plantillas,copas):
+    def __init__(self, user_id, nombre, avatar_url,saldo,cartas,plantillas,copas,last_claim):
         self.user_id = user_id
         self.nombre = nombre
         self.avatar_url = avatar_url
@@ -11,6 +11,7 @@ class User:
         self.cartas = cartas
         self.plantillas = plantillas
         self.copas = copas
+        self.last_claim = last_claim
    
     def mostrar_info(self,collection):
         
@@ -105,7 +106,8 @@ class User:
             "saldo": self.saldo,
             "cartas": self.cartas,
             "plantillas": self.plantillas,
-            "copas": self.copas
+            "copas": self.copas,
+            "last_claim": self.last_claim
         }
         
         
