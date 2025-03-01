@@ -20,11 +20,11 @@ async def on_ready():
     print(f"✅ Bot conectado correctamente como {bot.user}")
 
 @bot.slash_command(name="p", description="Ver información de un usuario")
-async def p(interaction: nextcord.Interaction, member: nextcord.Member = None):
-    member = member or interaction.user  # Si no se menciona, usa el que ejecutó el comando
-    
+async def p(interaction: nextcord.Interaction):
+    member = interaction.user  
+    avatar_url = member.avatar.url if member.avatar else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+
     existing_user = users_collection.find_one(member.id)
-    
     if existing_user:
         saldo = existing_user['saldo']
         cartas =  existing_user['cartas']
@@ -40,7 +40,7 @@ async def p(interaction: nextcord.Interaction, member: nextcord.Member = None):
     usuario = User(
         user_id=member.id,
         nombre=member.name,
-        avatar_url= member.avatar.url,
+        avatar_url= avatar_url,
         saldo= saldo,
         cartas= cartas,
         plantillas=plantillas,
@@ -48,9 +48,9 @@ async def p(interaction: nextcord.Interaction, member: nextcord.Member = None):
     )
     
     
+    file =  file = nextcord.File(usuario.mostrar_info(users_collection), filename="perfil.png")
     
-    
-    await interaction.response.send_message(usuario.mostrar_info(users_collection))
+    await interaction.response.send_message(file=file)
 
 # Cargar variables de entorno
 load_dotenv()
