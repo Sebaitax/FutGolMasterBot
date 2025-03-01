@@ -1,4 +1,3 @@
-from ..database.conexion import users_collection
 class User:
     def __init__(self, user_id, nombre, avatar_url,saldo,cartas,plantillas,copas):
         self.user_id = user_id
@@ -9,31 +8,41 @@ class User:
         self.plantillas = plantillas
         self.copas = copas
    
-    def mostrar_info(self):
-        return (
+    def mostrar_info(self,collection):
+        existing_user = collection.find_one({"user_id":self.user_id})
+        if existing_user:
+            self.update(collection)
+            info = (f"**{self.nombre}**\n"
+            f"Avatar: {self.avatar_url}\n"
+            f"Saldo: {self.saldo}$\n"
+            f"Cartas: {self.cartas}/100\n"
+            f"Plantillas: {self.plantillas}/5\n"
+            f"Copas: {self.copas}")
+        else:
+            self.save(collection)
+            info=(
+            f"¡Bienvenido por primera vez!\n"
             f"**{self.nombre}**\n"
             f"Avatar: {self.avatar_url}\n"
             f"Saldo: {self.saldo}$\n"
             f"Cartas: {self.cartas}/100\n"
             f"Plantillas: {self.plantillas}/5\n"
-            f"Copas: {self.copas}"
-        )
+            f"Copas: {self.copas}")
+        return (info)
         
-    def guardar_en_db(self):
-        existing_user = users_collection.find_one({"user_id": self.user_id})
-        if existing_user:
-            print(f"Usuario {self.nombre} ya existe en la base de datos.")
-        else:
-           
-            user_data = {
-                "user_id": self.user_id,
-                "nombre": self.nombre,
-                "avatar_url": self.avatar_url,
-                "saldo": self.saldo,
-                "cartas": self.cartas,
-                "plantillas": self.plantillas,
-                "copas": self.copas,
-            }
-            # Insertar el documento en la colección "users"
-            users_collection.insert_one(user_data)
-            print(f"Usuario {self.nombre} guardado en la base de datos.")
+    def save(self,collection):
+        collection.insert_one(self.to_dict())
+    
+    def update(self,collection):    
+        collection.update_one({"user_id": self.user_id}, {"$set": self.to_dict()})
+            
+    def to_dict(self):
+        return {
+            "user_id": self.user_id,
+            "nombre": self.nombre,
+            "avatar_url": self.avatar_url,
+            "saldo": self.saldo,
+            "cartas": self.cartas,
+            "plantillas": self.plantillas,
+            "copas": self.copas
+        }
