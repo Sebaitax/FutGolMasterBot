@@ -14,12 +14,28 @@ intents.members = True
 
 
 bot = commands.Bot(intents=intents)
-
+#eventos
 @bot.event
 async def on_ready():
     print(f"✅ Bot conectado correctamente como {bot.user}")
 
 
+
+
+
+
+#camandos
+
+
+
+
+
+
+
+
+
+
+#CLAIM DE CARTAS
 @bot.slash_command(name="claim", description="Reclamar cartas")
 async def claim(interaction: nextcord.Interaction):
     user = interaction.user
@@ -61,6 +77,10 @@ async def claim(interaction: nextcord.Interaction):
         await interaction.response.send_message("No puedes utilizar este comando sin un perfil, utiliza `/p` para crear tu perfil.")
 
 
+
+
+
+#GENERAR USUARIO
 @bot.slash_command(name="p", description="Ver información de un usuario")
 async def p(interaction: nextcord.Interaction):
     user = interaction.user  
