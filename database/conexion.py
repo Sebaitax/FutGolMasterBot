@@ -11,8 +11,8 @@ load_dotenv()
 client = MongoClient(os.getenv('MONGO_URI'))
 db = client[os.getenv('DATABASE_NAME')]
 
-# Ejemplo: colección de usuarios
 users_collection = db["users"]
+cards_colection = db['cards']
 
 # Verificar la conexión
 def probar_conexion():

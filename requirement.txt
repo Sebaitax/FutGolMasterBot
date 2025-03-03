@@ -3,3 +3,4 @@ pillow
 requests
 python-dotenv
 pymongo
+pandas

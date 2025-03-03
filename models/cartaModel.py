@@ -1,18 +1,16 @@
 class Carta:
-    def __init__(self,nombre,tipo,velocidad,disparo,pase,dribbling,defensa,fisico,equipo,nacionalidad,):
+    def __init__(self,nombre,posicion,club,liga,OVR,PAC,DRI,DEF,PHY,precio):
         self.nombre = nombre
-        self.tipo = tipo
+        self.posicion = posicion
+        self.club = club
+        self.liga = liga
         self.estadisticas = {
-            'velocidad':velocidad,
-            'disparo': disparo,
-            'pase': pase,
-            'dribbling': dribbling,
-            'defensa': defensa,
-            'fisico': fisico
+            'OVR':OVR,
+            'PAC': PAC,
+            'DRI': DRI,
+            'DEF': DEF,
+            'PHY': PHY,
         }        
-        self.equipo = equipo
-        self.nacionalidad = nacionalidad
-        self.precio = self.calcular_precio()
+        self.precio = precio
         
-    def calcular_precio(self):
-        return (self.estadisticas['velocidad'] + self.estadisticas['disparo'] + self.estadisticas['pase']) * 100
+   
