@@ -12,7 +12,7 @@ client = MongoClient(os.getenv('MONGO_URI'))
 db = client[os.getenv('DATABASE_NAME')]
 
 users_collection = db["users"]
-cards_colection = db['cards']
+cards_collection = db['cards']
 
 # Verificar la conexión
 def probar_conexion():
