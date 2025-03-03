@@ -3,7 +3,7 @@ from nextcord.ext import commands
 from dotenv import load_dotenv
 import os
 from models.userModel import User
-from database.conexion import users_collection
+from database.conexion import users_collection,cards_collection
 from datetime import datetime, timedelta
 import random
 
@@ -57,15 +57,29 @@ async def claim(interaction: nextcord.Interaction):
                 await interaction.response.send_message(f"❌ Debes esperar {hours} hora(s), {minutes} minuto(s) y {seconds} segundo(s) antes de reclamar nuevamente.")
                 return  
         
-        get_cards = random.randint(1, 6)
         
-        if get_cards > 1: message = f"{get_cards} cartas"
-        else: message = f"{get_cards} carta"  
+        cartas = cards_collection.aggregate([{"$sample": {"size": 7}}])
+        # cartas = cards_collection.find()
+        cartas_ids = []
+        c = 0
+        for carta in cartas:
+            c+=1
+            cartas_ids.append(carta['_id'])
+            
+        if c > 1: message = f"{c} cartas"
+        
+        
+        else: message = f"{c} carta"  
         users_collection.update_one(
             {"user_id": user.id},
-            {"$inc": {"cartas": get_cards}} 
+            {"$inc": {"cartas": c}} 
         )
-
+    
+        users_collection.update_one(
+            {"user_id": user.id},  
+            {"$addToSet": {"jugadores": {"$each": cartas_ids}}}  # Agregamos los IDs de las cartas a la lista "cartas"
+        )
+    
         users_collection.update_one(
             {"user_id": user.id},
             {"$set": {"last_claim": datetime.utcnow()}}
