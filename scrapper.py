@@ -150,7 +150,7 @@ def scrape_all(pages=5):
     print("✅ Datos guardados en 'cartas.csv'.")
 
 # Ejecutar el scraper con 5 páginas de prueba
-scrape_all(pages=5)
+scrape_all(pages=1)
 
 # Cerrar el navegador
 driver.quit()

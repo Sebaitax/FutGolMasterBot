@@ -1,151 +1,31 @@
 Nombre,Posición,Club,Nación,Liga,OVR,PAC,SHO,PAS,DRI,DEF,PHY,Precio
-Rodrigo Hernández Cascante,CDM++,Manchester City,Spain,Premier League,97,0,0,0,0,0,0,2100000
-Aitana Bonmatí Conca,CM++,FC Barcelona,Spain,Liga F,97,88,88,90,88,97,90,3570000
-Caroline Graham Hansen,RW++,FC Barcelona,Norway,Liga F,97,90,92,92,97,82,82,3570000
-Vinícius José de Oliveira Júnior,LW++,Real Madrid,Brazil,LALIGA EA SPORTS,97,96,95,95,97,58,86,3570000
-Sophia Wilson,ST++,Portland Timbers-Thorns,United States,NWSL,97,99,91,90,98,38,78,3150000
-Rodrigo Hernández Cascante,CDM++,Manchester City,Spain,Premier League,97,98,95,87,98,54,93,3570000
-Jude Bellingham,CAM++,Real Madrid,England,LALIGA EA SPORTS,97,89,86,94,91,97,92,3570000
-Aitana Bonmatí Conca,CM++,FC Barcelona,Spain,Liga F,97,90,95,92,97,87,91,3885000
-Zinedine Zidane,CAM++,EA FC ICONS,France,Icons,96,90,92,95,97,85,84,3060000
-Edson Arantes Nascimento,CAM++,EA FC ICONS,Brazil,Icons,96,86,92,96,96,76,86,3060000
-Mohamed Salah,RW++,Liverpool,Egypt,Premier League,96,94,95,92,95,60,80,2880000
-Kylian Mbappé,ST++,Real Madrid,France,LALIGA EA SPORTS,96,96,94,91,96,57,84,2880000
-Lauren James,RW++,Chelsea,England,Barclays WSL,96,99,95,86,97,43,85,2880000
-Guro Reiten,LM++,Chelsea,Norway,Barclays WSL,96,98,91,90,97,51,93,2880000
-Alexia Putellas Segura,CM++,FC Barcelona,Spain,Liga F,96,96,91,94,94,70,75,2880000
-Virgil van Dijk,CB++,Liverpool,Netherlands,Premier League,96,88,95,96,97,80,86,3060000
-Johan Cruyff,CAM++,EA FC ICONS,Netherlands,Icons,96,87,67,80,78,96,95,2880000
-Diego Maradona,CAM++,EA FC ICONS,Argentina,Icons,96,93,94,93,96,45,78,2700000
-Edson Arantes Nascimento,CAM++,EA FC ICONS,Brazil,Icons,95,92,92,92,97,42,80,2250000
-Rúben Santos Gato Alves Dias,CB++,Manchester City,Portugal,Premier League,95,93,94,91,94,58,74,2400000
-Kylian Mbappé,ST++,Real Madrid,France,LALIGA EA SPORTS,95,91,44,75,75,95,90,2100000
-Jude Bellingham,CAM++,Real Madrid,England,LALIGA EA SPORTS,95,98,93,89,94,42,81,2250000
-Vinícius José de Oliveira Júnior,LW++,Real Madrid,Brazil,LALIGA EA SPORTS,95,91,92,95,93,86,87,2550000
-William Saliba,CB++,Arsenal,France,Premier League,95,97,90,89,95,40,75,2250000
-Lamine Yamal,RW++,FC Barcelona,Spain,LALIGA EA SPORTS,95,93,46,78,78,95,88,2250000
-Erling Haaland,ST++,Manchester City,Norway,Premier League,95,93,94,93,95,40,80,2250000
-Lauren James,RW++,Chelsea,England,Barclays WSL,95,93,95,92,92,50,95,2400000
-Harry Kane,ST++,FC Bayern München,England,Bundesliga,95,95,94,95,93,51,91,2400000
-Caroline Graham Hansen,RW++,FC Barcelona,Norway,Liga F,95,90,95,90,92,53,92,2400000
-Trinity Rodman,RM++,Washington Spirit,United States,NWSL,95,92,92,92,95,54,85,2400000
-Marie Katoto,ST++,Paris SG,France,D1 Arkema,95,0,0,0,0,0,0,1500000
-Giulia Gwinn,RB++,FC Bayern München,Germany,GPFBL,95,92,95,91,91,42,92,2400000
-Sophia Wilson,ST++,Portland Timbers-Thorns,United States,NWSL,95,91,80,91,92,95,84,2550000
-Lautaro Martínez,ST++,Lombardia FC,Argentina,Serie A TIM,95,95,95,86,92,50,90,2400000
-Lindsey Horan,CM++,OL,United States,D1 Arkema,95,91,95,80,92,60,88,2400000
-Tarciane Karen dos Santos de Lima,CB++,Houston Dash,Brazil,NWSL,95,93,90,92,93,81,91,2550000
-Salma Celeste Paralluelo Ayingono,LW++,FC Barcelona,Spain,Liga F,95,90,52,77,78,95,90,2250000
-Ronaldo Luís Nazário de Lima,ST++,EA FC ICONS,Brazil,Icons,95,95,92,92,94,50,85,2400000
-Cole Palmer,CAM++,Chelsea,England,Premier League,95,95,95,80,95,44,76,2250000
-Sakina Karchaoui,LB++,Paris SG,France,D1 Arkema,95,90,93,95,97,60,80,2400000
-Wendie Renard,CB++,OL,France,D1 Arkema,95,97,75,91,95,92,80,2550000
-William Saliba,CB++,Arsenal,France,Premier League,95,86,73,80,78,98,93,2400000
-Daniel Carvajal Ramos,RB++,Real Madrid,Spain,LALIGA EA SPORTS,95,90,47,80,83,95,93,2250000
-Eusébio da Silva Ferreira,ST++,EA FC ICONS,Portugal,Icons,95,94,78,87,92,95,87,2550000
-Erling Haaland,ST++,Manchester City,Norway,Premier League,95,94,95,88,95,48,82,2400000
-Khadija Shaw,ST++,Manchester City,Jamaica,Barclays WSL,95,92,96,77,88,50,92,2250000
-C. Ronaldo dos Santos Aveiro,ST++,Al Nassr,Portugal,ROSHN Saudi League,95,90,95,85,90,41,94,2250000
-Diego Maradona,CAM++,EA FC ICONS,Argentina,Icons,95,91,96,88,92,42,90,2250000
-Zinedine Zidane,CAM++,EA FC ICONS,France,Icons,94,90,91,91,96,40,77,1935000
-Ronaldo Luís Nazário de Lima,ST++,EA FC ICONS,Brazil,Icons,94,83,90,94,94,73,84,2064000
-Kylian Mbappé,ST++,Real Madrid,France,LALIGA EA SPORTS,94,94,94,79,94,43,75,1935000
-Ronaldo de Assis Moreira,LW++,EA FC ICONS,Brazil,Icons,94,99,93,84,95,39,82,1935000
-Erling Haaland,CB++,Manchester City,Norway,Premier League,94,92,90,91,96,40,82,1935000
-Erling Haaland,ST++,Manchester City,Norway,Premier League,94,90,78,80,75,88,94,2064000
-Mia Hamm,ST++,EA FC ICONS,United States,Icons,94,91,95,76,87,48,91,1935000
-Ferenc Puskás,ST++,EA FC ICONS,Hungary,Icons,94,93,94,87,93,55,82,2064000
-Kevin De Bruyne,CM++,Manchester City,Belgium,Premier League,94,92,95,92,94,53,88,2064000
-Emiliano Martínez,GK++,Aston Villa,Argentina,Premier League,94,85,92,95,92,80,83,2193000
-Ann-Katrin Berger,GK++,NJ/NY Gotham,Germany,NWSL,94,91,89,90,93,63,94,2064000
-Alejandro Grimaldo García,LB++,Leverkusen,Spain,Bundesliga,94,95,94,90,94,55,91,2064000
-Irene Paredes Hernández,CB++,FC Barcelona,Spain,Liga F,94,0,0,0,0,0,0,1290000
-Lucy Bronze,RB++,Chelsea,England,Barclays WSL,94,85,57,80,80,95,93,1935000
-Harry Kane,ST++,FC Bayern München,England,Bundesliga,94,94,78,91,90,92,93,2193000
-Lamine Yamal,RW++,FC Barcelona,Spain,LALIGA EA SPORTS,94,85,97,90,90,53,87,2064000
-Bobby Charlton,ST++,EA FC ICONS,England,Icons,94,96,92,93,96,40,70,1935000
-Samuel Eto'o,ST++,EA FC ICONS,Cameroon,Icons,94,92,94,90,93,52,76,1935000
-Manuel Franc. dos Santos,RW++,EA FC ICONS,Brazil,Icons,94,95,94,85,90,52,86,2064000
-Roberto Baggio,CAM++,EA FC ICONS,Italy,Icons,94,92,88,94,96,42,70,1935000
-Ronaldo de Assis Moreira,LW++,EA FC ICONS,Brazil,Icons,93,90,88,93,94,44,66,1620000
-Johan Cruyff,CAM++,EA FC ICONS,Netherlands,Icons,93,91,89,90,95,38,80,1620000
-Mia Hamm,ST++,EA FC ICONS,United States,Icons,93,90,91,90,93,42,73,1620000
-Jude Bellingham,CAM++,Real Madrid,England,LALIGA EA SPORTS,93,92,93,86,92,54,81,1620000
-Harry Kane,ST++,FC Bayern München,England,Bundesliga,93,85,91,87,92,83,87,1836000
-Virgil van Dijk,CB++,Liverpool,Netherlands,Premier League,93,82,96,87,87,52,85,1620000
-Erling Haaland,ST++,Manchester City,Norway,Premier League,93,83,64,75,75,93,90,1620000
-Kevin De Bruyne,CM++,Manchester City,Belgium,Premier League,93,90,94,74,84,47,90,1620000
-Ruud Gullit,CAM++,EA FC ICONS,Netherlands,Icons,93,84,91,97,91,72,82,1728000
-Arthur Antunes Coimbra,CAM++,EA FC ICONS,Brazil,Icons,93,88,91,93,89,83,90,1836000
-Paolo Maldini,CB++,EA FC ICONS,Italy,Icons,93,91,94,93,93,65,74,1728000
-Vinícius José de Oliveira Júnior,LW++,Real Madrid,Brazil,LALIGA EA SPORTS,93,86,56,75,70,96,85,1512000
-Caroline Graham Hansen,RW++,FC Barcelona,Norway,Liga F,93,98,87,84,94,34,74,1512000
-Vinícius José de Oliveira Júnior,ST++,Real Madrid,Brazil,LALIGA EA SPORTS,93,92,91,91,93,52,82,1728000
-Birgit Prinz,ST++,EA FC ICONS,Germany,Icons,93,98,87,84,94,34,74,1512000
-Kenny Dalglish,ST++,EA FC ICONS,Scotland,Icons,93,86,93,81,86,53,90,1620000
-Iker Casillas Fernández,GK++,EA FC ICONS,Spain,Icons,93,92,93,81,91,45,78,1620000
-Marcos de Morais,RB++,EA FC ICONS,Brazil,Icons,93,93,91,89,96,72,91,1836000
-Thierry Henry,ST++,EA FC ICONS,France,Icons,93,93,70,85,90,92,90,1728000
-Lionel Messi,RW++,Inter Miami CF,Argentina,MLS,93,94,93,93,92,60,90,1728000
-Phil Foden,RW++,Manchester City,England,Premier League,93,87,90,93,96,39,71,1620000
-Kylian Mbappé,ST++,Real Madrid,France,LALIGA EA SPORTS,93,93,92,91,96,63,70,1728000
-Endrick Felipe Moreira de Sousa,ST++,Real Madrid,Brazil,LALIGA EA SPORTS,93,0,0,0,0,0,0,1080000
-Lev Yashin,GK++,EA FC ICONS,Russia,Icons,93,94,91,80,92,46,80,1620000
-Paulo Dybala,CAM++,AS Roma,Argentina,Serie A TIM,93,94,91,77,95,61,94,1728000
-Ian Wright,ST++,EA FC ICONS,England,Icons,93,90,92,91,94,50,73,1620000
-Julie Foudy,CM++,EA FC ICONS,United States,Icons,93,94,95,80,90,46,84,1620000
-Franck Ribéry,LM++,EA FC ICONS,France,Icons,93,86,88,93,90,85,85,1836000
-Heung Min Son,ST++,Spurs,Korea Republic,Premier League,93,93,90,92,94,44,75,1620000
-Aurélien Tchouaméni,CB++,Real Madrid,France,LALIGA EA SPORTS,93,93,94,88,91,52,82,1728000
-Omar Marmoush,CAM++,Manchester City,Egypt,Premier League,93,85,76,86,87,93,91,1728000
-Khvicha Kvaratskhelia,LW++,Paris SG,Georgia,Ligue 1 Uber Eats,93,96,90,87,93,46,84,1620000
-Blaise Matuidi,CDM++,HERO,France,Ligue 1 Uber Eats,93,93,88,88,93,50,82,1620000
-Eden Hazard,LM++,HERO,Belgium,LALIGA EA SPORTS,93,90,80,87,87,92,93,1836000
-Marcus Rashford,LM++,Aston Villa,England,Premier League,93,96,90,90,96,44,75,1620000
-Rodrygo Silva de Goes,RW++,Real Madrid,Brazil,LALIGA EA SPORTS,93,97,93,88,93,47,82,1728000
-José Roberto da Silva Júnior,LM++,HERO,Brazil,Bundesliga,93,95,90,90,94,38,74,1620000
-Mario Gomez,ST++,HERO,Germany,Bundesliga,93,93,90,93,95,85,88,1836000
-Nadine Angerer,GK++,EA FC ICONS,Germany,Icons,92,91,95,82,90,48,88,1305000
-Gerd Müller,ST++,EA FC ICONS,Germany,Icons,92,92,88,79,94,59,92,1392000
-Bobby Charlton,CAM++,EA FC ICONS,England,Icons,92,87,92,76,85,44,74,1218000
-Lev Yashin,GK++,EA FC ICONS,Russia,Icons,92,90,91,87,91,50,74,1305000
-Paolo Maldini,CB++,EA FC ICONS,Italy,Icons,92,93,89,75,94,60,93,1392000
-Manuel Franc. dos Santos,RW++,EA FC ICONS,Brazil,Icons,92,85,55,74,69,95,82,1218000
-Ferenc Puskás,ST++,EA FC ICONS,Hungary,Icons,92,89,85,92,94,40,66,1218000
-Birgit Prinz,ST++,EA FC ICONS,Germany,Icons,92,90,94,89,91,45,74,1305000
-Erling Haaland,ST++,Manchester City,Norway,Premier League,92,83,92,80,82,52,88,1305000
-Julián Álvarez,ST++,Atlético de Madrid,Argentina,LALIGA EA SPORTS,92,89,93,72,82,46,89,1218000
-Kadidiatou Diani,RW++,OL,France,D1 Arkema,92,89,92,85,89,62,86,1392000
-Paulo Dybala,CAM++,AS Roma,Argentina,Serie A TIM,92,93,88,84,91,59,82,1305000
-Kylian Mbappé,ST++,Real Madrid,France,LALIGA EA SPORTS,92,85,89,89,93,48,72,1305000
-Aitana Bonmatí Conca,CM++,FC Barcelona,Spain,Liga F,92,98,91,82,93,37,80,1305000
-Vinícius José de Oliveira Júnior,LW++,Real Madrid,Brazil,LALIGA EA SPORTS,92,0,0,0,0,0,0,870000
-Rodrigo Hernández Cascante,CDM++,Manchester City,Spain,Premier League,92,97,86,83,93,32,72,1218000
-Caroline Graham Hansen,RW++,FC Barcelona,Norway,Liga F,92,80,81,88,86,92,87,1392000
-Harry Kane,ST++,FC Bayern München,England,Bundesliga,92,91,90,90,92,50,80,1305000
-Erling Haaland,ST++,Manchester City,Norway,Premier League,92,72,95,86,85,51,86,1305000
-Xavi Simons,CAM++,RB Leipzig,Netherlands,Bundesliga,92,89,93,71,83,46,89,1218000
-Marcus Rashford,LM++,Manchester Utd,England,Premier League,92,90,86,91,93,70,80,1392000
-Lothar Matthäus,CM++,EA FC ICONS,Germany,Icons,92,96,92,87,92,46,81,1305000
-Phil Foden,RW++,Manchester City,England,Premier League,92,90,89,91,83,92,84,1479000
-Raúl González Blanco,ST++,EA FC ICONS,Spain,Icons,92,92,91,89,95,62,67,1305000
-Lionel Messi,CAM++,Inter Miami CF,Argentina,MLS,92,88,92,83,90,48,74,1305000
-Franco Baresi,CB++,EA FC ICONS,Italy,Icons,92,86,89,92,95,38,70,1218000
-Roberto Baggio,CAM++,EA FC ICONS,Italy,Icons,92,78,50,76,71,95,84,1218000
-Sam Kerr,ST++,Chelsea,Australia,Barclays WSL,92,85,83,91,92,42,64,1218000
-Carlos Alberto Torres,CB++,EA FC ICONS,Brazil,Icons,92,87,90,76,92,45,85,1305000
-Carlos Alberto Torres,CDM++,EA FC ICONS,Brazil,Icons,92,90,66,81,85,92,86,1392000
-Kylian Mbappé,ST++,Real Madrid,France,LALIGA EA SPORTS,92,92,66,85,87,89,86,1392000
-Rivaldo Vítor Borba Ferreira,LW++,EA FC ICONS,Brazil,Icons,92,98,91,81,93,38,80,1305000
-Jude Bellingham,CAM++,Real Madrid,England,LALIGA EA SPORTS,92,89,90,89,93,44,99,1392000
-Homare Sawa,CAM++,EA FC ICONS,Japan,Icons,92,83,89,86,91,81,85,1392000
-Homare Sawa,CM++,EA FC ICONS,Japan,Icons,92,86,89,92,93,84,77,1392000
-Rafael da Conceição Leão,CAM++,Milano FC,Portugal,Serie A TIM,92,86,88,93,92,85,77,1392000
-Robert Lewandowski,ST++,FC Barcelona,Poland,LALIGA EA SPORTS,92,96,87,87,92,46,85,1305000
-Antoine Griezmann,RM++,Atlético de Madrid,France,LALIGA EA SPORTS,92,87,92,87,90,50,88,1305000
-Joshua Kimmich,CDM++,FC Bayern München,Germany,Bundesliga,92,88,91,92,92,62,80,1392000
-Gareth Bale,ST++,EA FC ICONS,Wales,Icons,92,88,80,94,90,92,87,1479000
-Eric Cantona,ST++,EA FC ICONS,France,Icons,92,98,93,90,93,70,83,1479000
-Aya Miyama,LM++,EA FC ICONS,Japan,Icons,92,90,92,90,92,55,91,1392000
-Roberto Carlos da Silva Rocha,LB++,EA FC ICONS,Brazil,Icons,92,90,90,90,92,70,83,1392000
-Lautaro Martínez,ST++,Lombardia FC,Argentina,Serie A TIM,92,92,87,88,85,90,91,1479000
+Rodrigo Hernández Cascante,CDM++,Manchester City,Spain,Premier League,97,88,88,90,88,97,90,3570000
+Aitana Bonmatí Conca,CM++,FC Barcelona,Spain,Liga F,97,90,92,92,97,82,82,3570000
+Caroline Graham Hansen,RW++,FC Barcelona,Norway,Liga F,97,96,95,95,97,58,86,3570000
+Vinícius José de Oliveira Júnior,LW++,Real Madrid,Brazil,LALIGA EA SPORTS,97,99,91,90,98,38,78,3150000
+Sophia Wilson,ST++,Portland Timbers-Thorns,United States,NWSL,97,98,95,87,98,54,93,3570000
+Rodrigo Hernández Cascante,CDM++,Manchester City,Spain,Premier League,97,89,86,94,91,97,92,3570000
+Jude Bellingham,CAM++,Real Madrid,England,LALIGA EA SPORTS,97,90,95,92,97,87,91,3885000
+Aitana Bonmatí Conca,CM++,FC Barcelona,Spain,Liga F,97,90,92,95,97,85,84,3570000
+Zinedine Zidane,CAM++,EA FC ICONS,France,Icons,96,86,92,96,96,76,86,3060000
+Edson Arantes Nascimento,CAM++,EA FC ICONS,Brazil,Icons,96,94,95,92,95,60,80,2880000
+Mohamed Salah,RW++,Liverpool,Egypt,Premier League,96,96,94,91,96,57,84,2880000
+Kylian Mbappé,ST++,Real Madrid,France,LALIGA EA SPORTS,96,99,95,86,97,43,85,2880000
+Lauren James,RW++,Chelsea,England,Barclays WSL,96,98,91,90,97,51,93,2880000
+Guro Reiten,LM++,Chelsea,Norway,Barclays WSL,96,96,91,94,94,70,75,2880000
+Alexia Putellas Segura,CM++,FC Barcelona,Spain,Liga F,96,88,95,96,97,80,86,3060000
+Virgil van Dijk,CB++,Liverpool,Netherlands,Premier League,96,87,67,80,78,96,95,2880000
+Johan Cruyff,CAM++,EA FC ICONS,Netherlands,Icons,96,93,94,93,96,45,78,2700000
+Diego Maradona,CAM++,EA FC ICONS,Argentina,Icons,96,92,92,92,97,42,80,2700000
+Edson Arantes Nascimento,CAM++,EA FC ICONS,Brazil,Icons,95,93,94,91,94,58,74,2400000
+Rúben Santos Gato Alves Dias,CB++,Manchester City,Portugal,Premier League,95,91,44,75,75,95,90,2100000
+Kylian Mbappé,ST++,Real Madrid,France,LALIGA EA SPORTS,95,98,93,89,94,42,81,2250000
+Jude Bellingham,CAM++,Real Madrid,England,LALIGA EA SPORTS,95,91,92,95,93,86,87,2550000
+Vinícius José de Oliveira Júnior,LW++,Real Madrid,Brazil,LALIGA EA SPORTS,95,97,90,89,95,40,75,2250000
+William Saliba,CB++,Arsenal,France,Premier League,95,93,46,78,78,95,88,2250000
+Lamine Yamal,RW++,FC Barcelona,Spain,LALIGA EA SPORTS,95,93,94,93,95,40,80,2250000
+Erling Haaland,ST++,Manchester City,Norway,Premier League,95,93,95,92,92,50,95,2400000
+Lauren James,RW++,Chelsea,England,Barclays WSL,95,95,94,95,93,51,91,2400000
+Harry Kane,ST++,FC Bayern München,England,Bundesliga,95,90,95,90,92,53,92,2400000
+Caroline Graham Hansen,RW++,FC Barcelona,Norway,Liga F,95,92,92,92,95,54,85,2400000
+Trinity Rodman,RM++,Washington Spirit,United States,NWSL,95,97,92,91,91,50,90,2400000
