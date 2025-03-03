@@ -5,7 +5,7 @@ class Carta:
         self.club = club
         self.liga = liga
         self.estadisticas = {
-            'OVR':OVR,
+            'OVR': OVR,
             'PAC': PAC,
             'DRI': DRI,
             'DEF': DEF,
@@ -14,3 +14,12 @@ class Carta:
         self.precio = precio
         
    
+    def to_dict(self):
+        return {
+            'nombre': self.nombre,
+            'posicion': self.posicion,
+            'club': self.club,
+            'liga': self.liga,
+            'estadisticas': self.estadisticas,
+            'precio': self.precio
+        }
