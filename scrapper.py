@@ -45,83 +45,81 @@ def scrape_page(page):
     # Esperar hasta que la tabla de jugadores cargue
     try:
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "table-player-name"))
+            EC.presence_of_element_located((By.CLASS_NAME, "player-row"))
         )
     except:
         print(f"⚠ La página {page} no cargó correctamente. Saltando...")
         return
 
-    # Extraer nombres de jugadores
-    name_elements = driver.find_elements(By.CLASS_NAME, "table-player-name")
+    # Obtener todas las filas de jugadores
+    player_rows = driver.find_elements(By.CLASS_NAME, "player-row")
 
-    # Extraer posiciones
-    pos_elements = driver.find_elements(By.CLASS_NAME, "table-pos-main")
+    for row in player_rows:
+        try:
+            # Extraer nombre del jugador
+            name_elem = row.find_element(By.CLASS_NAME, "table-player-name")
+            name = name_elem.text.strip()
 
-    # Extraer calificación general (OVR)
-    ovr_elements = driver.find_elements(By.CLASS_NAME, "player-rating-card-text")
-
-    # Extraer club, nación y liga desde la clase correcta
-    sub_info_elements = driver.find_elements(By.CLASS_NAME, "table-player-sub-info")
-
-    # Extraer estadísticas clave
-    pace_elements = driver.find_elements(By.CLASS_NAME, "table-pace")
-    shooting_elements = driver.find_elements(By.CLASS_NAME, "table-shooting")
-    passing_elements = driver.find_elements(By.CLASS_NAME, "table-passing")
-    dribbling_elements = driver.find_elements(By.CLASS_NAME, "table-dribbling")
-    defending_elements = driver.find_elements(By.CLASS_NAME, "table-defending")
-    physicality_elements = driver.find_elements(By.CLASS_NAME, "table-physicality")
-
-    for i in range(len(name_elements)):
-        # Extraer nombre
-        names.append(name_elements[i].text.strip())
-
-        # Extraer posición
-        positions.append(pos_elements[i].text.strip() if i < len(pos_elements) else "N/A")
-
-        # Extraer OVR (Calificación General)
-        ovr = get_stat_value(ovr_elements[i]) if i < len(ovr_elements) else 0
-        ovr_ratings.append(ovr)
-
-        # Extraer club, nación y liga
-        if i < len(sub_info_elements):
+            # Extraer posición
             try:
-                club_elem = sub_info_elements[i].find_element(By.CLASS_NAME, "table-player-club").find_element(By.TAG_NAME, "img")
-                nation_elem = sub_info_elements[i].find_element(By.CLASS_NAME, "table-player-nation").find_element(By.TAG_NAME, "img")
-                league_elem = sub_info_elements[i].find_element(By.CLASS_NAME, "table-player-league").find_element(By.TAG_NAME, "img")
-
-                clubs.append(club_elem.get_attribute("title") if club_elem else "N/A")
-                nations.append(nation_elem.get_attribute("title") if nation_elem else "N/A")
-                leagues.append(league_elem.get_attribute("title") if league_elem else "N/A")
+                position_elem = row.find_element(By.CLASS_NAME, "table-pos-main")
+                position = position_elem.text.strip()
             except:
-                clubs.append("N/A")
-                nations.append("N/A")
-                leagues.append("N/A")
-        else:
-            clubs.append("N/A")
-            nations.append("N/A")
-            leagues.append("N/A")
+                position = "N/A"
 
-        # Extraer estadísticas clave usando `get_stat_value()`
-        pace = get_stat_value(pace_elements[i]) if i < len(pace_elements) else 0
-        shooting = get_stat_value(shooting_elements[i]) if i < len(shooting_elements) else 0
-        passing = get_stat_value(passing_elements[i]) if i < len(passing_elements) else 0
-        dribbling = get_stat_value(dribbling_elements[i]) if i < len(dribbling_elements) else 0
-        defending = get_stat_value(defending_elements[i]) if i < len(defending_elements) else 0
-        physicality = get_stat_value(physicality_elements[i]) if i < len(physicality_elements) else 0
+            # Extraer OVR (Calificación General)
+            try:
+                ovr_elem = row.find_element(By.CLASS_NAME, "player-rating-card-text")
+                ovr = get_stat_value(ovr_elem)
+            except:
+                ovr = 0
 
-        paces.append(pace)
-        shootings.append(shooting)
-        passings.append(passing)
-        dribblings.append(dribbling)
-        defendings.append(defending)
-        physicalities.append(physicality)
+            # Extraer club, nación y liga
+            try:
+                club_elem = row.find_element(By.CLASS_NAME, "table-player-club").find_element(By.TAG_NAME, "img")
+                nation_elem = row.find_element(By.CLASS_NAME, "table-player-nation").find_element(By.TAG_NAME, "img")
+                league_elem = row.find_element(By.CLASS_NAME, "table-player-league").find_element(By.TAG_NAME, "img")
 
-        # Calcular "base_rating" como la suma de las estadísticas clave
-        base_rating = pace + shooting + passing + dribbling + defending + physicality
+                club = club_elem.get_attribute("title") if club_elem else "N/A"
+                nation = nation_elem.get_attribute("title") if nation_elem else "N/A"
+                league = league_elem.get_attribute("title") if league_elem else "N/A"
+            except:
+                club, nation, league = "N/A", "N/A", "N/A"
 
-        # Calcular el precio usando `get_price()`
-        price = get_price(ovr, base_rating)
-        prices.append(price)
+            # Extraer estadísticas clave (PAC, SHO, PAS, DRI, DEF, PHY)
+            try:
+                pace = get_stat_value(row.find_element(By.CLASS_NAME, "table-pace"))
+                shooting = get_stat_value(row.find_element(By.CLASS_NAME, "table-shooting"))
+                passing = get_stat_value(row.find_element(By.CLASS_NAME, "table-passing"))
+                dribbling = get_stat_value(row.find_element(By.CLASS_NAME, "table-dribbling"))
+                defending = get_stat_value(row.find_element(By.CLASS_NAME, "table-defending"))
+                physicality = get_stat_value(row.find_element(By.CLASS_NAME, "table-physicality"))
+            except:
+                pace, shooting, passing, dribbling, defending, physicality = 0, 0, 0, 0, 0, 0
+
+            # Calcular "base_rating" como la suma de las estadísticas clave
+            base_rating = pace + shooting + passing + dribbling + defending + physicality
+
+            # Calcular el precio usando `get_price()`
+            price = get_price(ovr, base_rating)
+
+            # Guardar los datos
+            names.append(name)
+            positions.append(position)
+            ovr_ratings.append(ovr)
+            clubs.append(club)
+            nations.append(nation)
+            leagues.append(league)
+            paces.append(pace)
+            shootings.append(shooting)
+            passings.append(passing)
+            dribblings.append(dribbling)
+            defendings.append(defending)
+            physicalities.append(physicality)
+            prices.append(price)
+
+        except Exception as e:
+            print(f"❌ Error procesando un jugador: {e}")
 
     print(f"✅ Página {page} completada.")
 
