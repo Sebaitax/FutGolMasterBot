@@ -164,9 +164,13 @@ def crear_carta_db(jugador):
 jugadores = cargar_jugadores_db()
 # print(jugadores[:3])
 # Filtrar jugador ejemplo (Rodrigo Hernández Cascante)
-jugador_ejemplo = next((j for j in jugadores if j["nombre"] == "Aitana Bonmatí Conca"), None)
-if jugador_ejemplo:
-    crear_carta_db(jugador_ejemplo)
-    print("Jugador encontrado:", jugador_ejemplo)
-else:
-    print("Jugador no encontrado.")
+# jugador_ejemplo = next((j for j in jugadores if j["nombre"] == "Aitana Bonmatí Conca"), None)
+# if jugador_ejemplo:
+#     crear_carta_db(jugador_ejemplo)
+#     print("Jugador encontrado:", jugador_ejemplo)
+# else:
+#     print("Jugador no encontrado.")
+
+
+for jugador in jugadores:
+    crear_carta_db(jugador)
