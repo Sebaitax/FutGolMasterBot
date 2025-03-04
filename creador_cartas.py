@@ -3,6 +3,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import os
+from database.conexion import cards_collection
 
 # Directorios de assets
 FONTS_DIR = "assets/fonts/"
@@ -35,7 +36,7 @@ def obtener_bandera(pais):
                         return Image.open(BytesIO(img_response.content))
     return None
 
-def cargar_jugadores(csv_file):
+def cargar_jugadores_csv(csv_file):
     jugadores = []
     with open(csv_file, newline='', encoding='utf-8') as file:
         reader = csv.DictReader(file)
@@ -43,6 +44,14 @@ def cargar_jugadores(csv_file):
             jugadores.append(row)
     return jugadores
 
+
+
+def cargar_jugadores_db():
+    jugadores= list(cards_collection.find())
+    for jugador in jugadores:
+        jugador.pop('_id',None)
+    return jugadores
+    
 def crear_carta(jugador):
     template_path = os.path.join(CARD_TEMPLATES_DIR, "default.png")  # Ajustar según plantilla disponible
     font_path = os.path.join(FONTS_DIR, "DINPro CondBold.otf")
@@ -91,7 +100,8 @@ def crear_carta(jugador):
     print(f"Carta creada: {output_path}")
 
 # Cargar jugadores del CSV
-jugadores = cargar_jugadores("cartas_ejemplo.csv")
+# jugadores = cargar_jugadores_csv("cartas_ejemplo.csv") 
+jugadores = cargar_jugadores_db()
 
 # Filtrar jugador ejemplo (Rodrigo Hernández Cascante)
 jugador_ejemplo = next((j for j in jugadores if j["Nombre"] == "Rodrigo Hernández Cascante"), None)
