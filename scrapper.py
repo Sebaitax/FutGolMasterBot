@@ -39,7 +39,7 @@ def get_stat_value(element):
         return 0  # En caso de error, asigna 0 como valor por defecto
 
 def scrape_page(page):
-    url = BASE_URL + str(page)
+    url = BASE_URL + str(page) + "&version=gold_rare&gender=men"
     print(f"Scrapeando: {url}")
     driver.get(url)
 
@@ -64,7 +64,7 @@ def scrape_page(page):
             # Extraer alias del jugador
             alias = "N/A"
             try:
-                img_elem = row.find_element(By.CLASS_NAME, "playersquare-special-img")
+                img_elem = row.find_element(By.CLASS_NAME, "playersquare-base-img")
                 alias = img_elem.get_attribute("alt").strip() if img_elem else "N/A"
             except:
                 pass
@@ -165,11 +165,11 @@ def scrape_all(pages=5):
         "PHY": physicalities,
         "Precio": prices
     })
-    df.to_csv("cartas.csv", index=False)
+    df.to_csv("cartas_oro_raras.csv", index=False)
     print("✅ Datos guardados en 'cartas.csv'.")
 
-# Ejecutar el scraper con 1 página de prueba
-scrape_all(pages=2)
+# Ejecutar el scraper 
+scrape_all(pages=21)
 
 # Cerrar el navegador
 driver.quit()
