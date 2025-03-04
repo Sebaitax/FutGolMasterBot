@@ -2,10 +2,15 @@ import nextcord
 from nextcord.ext import commands
 from dotenv import load_dotenv
 import os
+
 from models.userModel import User
+from models.paginacionModel import Paginacion
+
+
 from database.conexion import users_collection,cards_collection
 from datetime import datetime, timedelta
-import random
+
+
 
 intents = nextcord.Intents.default()
 intents.message_content = True
@@ -23,43 +28,22 @@ async def on_ready():
 
 
 #camandos
-
-import nextcord
-from nextcord import Interaction, ui
-
-class CartaButtons(ui.View):
-    def __init__(self, carta, user_id):
-        super().__init__()
-        self.carta = carta
-
-    @nextcord.ui.button(label="Subastar", style=nextcord.ButtonStyle.green)
-    async def subastar_button(self, button: nextcord.ui.Button, interaction: Interaction):
-        await interaction.response.send_message(f"Subastando la carta: {self.carta}")
-
-    @nextcord.ui.button(label="Vender", style=nextcord.ButtonStyle.red)
-    async def vender_button(self, button: nextcord.ui.Button, interaction: Interaction):
-        await interaction.response.send_message(f"Vendiendo la carta: {self.carta}")
-
-
+# Comando para mostrar las cartas
 @bot.slash_command(name="cards", description="Mostrar cartas")
 async def cards(interaction: nextcord.Interaction):
     user = interaction.user
     user_existing = users_collection.find_one({"user_id": user.id})
 
     if user_existing:
-        cartas = user_existing.get("jugadores", [])
-        
+        cartas = user_existing.get('jugadores')
         if cartas:
-            mensaje = "Has recibido las siguientes cartas:\n"
-            for carta in cartas:
-                view = CartaButtons(carta, user.id)
-                mensaje += f"- {carta}\n"
-                await interaction.response.send_message(mensaje, view=view)
-
+            view = Paginacion(cartas, user.id)
+            await view.mostrar_cartas(interaction)
         else:
             await interaction.response.send_message("No tienes cartas en tu perfil.")
     else:
         await interaction.response.send_message("No puedes utilizar este comando sin un perfil, utiliza `/p` para crear tu perfil.")
+
 
 
 #CLAIM DE CARTAS
@@ -75,42 +59,37 @@ async def claim(interaction: nextcord.Interaction):
             now = datetime.utcnow()
             time_diff = now - last_claim
             
-            if time_diff < timedelta(minutes=10):
-                remaining_time = timedelta(minutes=10) - time_diff
-                
+            if time_diff < timedelta(seconds=10):
+                remaining_time = timedelta(seconds=10) - time_diff
                 hours, remainder = divmod(remaining_time.seconds, 3600)
                 minutes, seconds = divmod(remainder, 60)
 
                 await interaction.response.send_message(f"❌ Debes esperar {hours} hora(s), {minutes} minuto(s) y {seconds} segundo(s) antes de reclamar nuevamente.")
                 return  
-        
-        
-        cartas = cards_collection.aggregate([{"$sample": {"size": 1}}])
-        # cartas = cards_collection.find()
-        cartas_ids = []
-        c = 0
-        for carta in cartas:
-            c+=1
-            cartas_ids.append(carta['nombre'])
-            
-        if c > 1: message = f"{c} cartas"
-        else: message = f"{c} carta"  
-        users_collection.update_one(
-            {"user_id": user.id},
-            {"$inc": {"cartas": c}} 
-        )
-    
-        users_collection.update_one(
-            {"user_id": user.id},  
-            {"$addToSet": {"jugadores": {"$each": cartas_ids}}}  # Agregamos los IDs de las cartas a la lista "cartas"
-        )
-    
-        users_collection.update_one(
-            {"user_id": user.id},
-            {"$set": {"last_claim": datetime.utcnow()}}
-        )
 
-        await interaction.response.send_message(f"✅ ¡Has reclamado {message}!")
+        carta = list(cards_collection.aggregate([{"$sample": {"size": 1}}]))
+        
+        if carta:
+            carta = carta[0]  
+
+            carta_nombre = carta.get('nombre', 'Carta desconocida')
+
+            users_collection.update_one(
+                {"user_id": user.id},
+                {"$inc": {"cartas": 1}} 
+            )
+
+            users_collection.update_one(
+                {"user_id": user.id},  
+                {"$addToSet": {"jugadores": carta}}  
+            )
+        
+            users_collection.update_one(
+                {"user_id": user.id},
+                {"$set": {"last_claim": datetime.utcnow()}}
+            )
+
+            await interaction.response.send_message(f"✅ ¡Has reclamado la carta: {carta_nombre}!")
 
     else:
         await interaction.response.send_message("No puedes utilizar este comando sin un perfil, utiliza `/p` para crear tu perfil.")
