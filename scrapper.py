@@ -26,6 +26,7 @@ dribblings = []
 defendings = []
 physicalities = []
 prices = []
+aliases = []  # Nueva lista para almacenar alias
 
 def get_stat_value(element):
     """
@@ -59,6 +60,22 @@ def scrape_page(page):
             # Extraer nombre del jugador
             name_elem = row.find_element(By.CLASS_NAME, "table-player-name")
             name = name_elem.text.strip()
+
+            # Extraer alias del jugador
+            alias = "N/A"
+            try:
+                img_elem = row.find_element(By.CLASS_NAME, "playersquare-special-img")
+                alias = img_elem.get_attribute("alt").strip() if img_elem else "N/A"
+            except:
+                pass
+
+            # Si el alias sigue siendo "N/A", intentar obtenerlo desde otro lugar
+            if alias == "N/A":
+                try:
+                    alias_elem = row.find_element(By.CLASS_NAME, "table-player-name")
+                    alias = alias_elem.text.strip() if alias_elem else "N/A"
+                except:
+                    pass
 
             # Extraer posición
             try:
@@ -105,6 +122,7 @@ def scrape_page(page):
 
             # Guardar los datos
             names.append(name)
+            aliases.append(alias)
             positions.append(position)
             ovr_ratings.append(ovr)
             clubs.append(club)
@@ -133,6 +151,7 @@ def scrape_all(pages=5):
     # Guardar en CSV
     df = pd.DataFrame({
         "Nombre": names,
+        "Alias": aliases,
         "Posición": positions,
         "Club": clubs,
         "Nación": nations,
@@ -149,8 +168,8 @@ def scrape_all(pages=5):
     df.to_csv("cartas.csv", index=False)
     print("✅ Datos guardados en 'cartas.csv'.")
 
-# Ejecutar el scraper con 5 páginas de prueba
-scrape_all(pages=1)
+# Ejecutar el scraper con 1 página de prueba
+scrape_all(pages=2)
 
 # Cerrar el navegador
 driver.quit()
