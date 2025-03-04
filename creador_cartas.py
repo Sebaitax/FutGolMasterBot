@@ -160,13 +160,13 @@ def crear_carta_db(jugador):
 
 
 # Cargar jugadores del CSV
-jugadores = cargar_jugadores_csv("cartas_ejemplo.csv") 
-# jugadores = cargar_jugadores_db()
+# jugadores = cargar_jugadores_csv("cartas_ejemplo.csv") 
+jugadores = cargar_jugadores_db()
 # print(jugadores[:3])
 # Filtrar jugador ejemplo (Rodrigo Hernández Cascante)
-jugador_ejemplo = next((j for j in jugadores if j["Liga"] == "Premier League"), None)
+jugador_ejemplo = next((j for j in jugadores if j["nombre"] == "Aitana Bonmatí Conca"), None)
 if jugador_ejemplo:
-    crear_carta(jugador_ejemplo)
+    crear_carta_db(jugador_ejemplo)
     print("Jugador encontrado:", jugador_ejemplo)
 else:
     print("Jugador no encontrado.")
