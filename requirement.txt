@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 nextcord
 pillow
 requests
 python-dotenv
 pymongo
 pandas
+undetected-chromedriver
+selenium
+
+
