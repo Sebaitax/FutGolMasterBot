@@ -1,11 +1,11 @@
 import nextcord
 from nextcord.ext import commands
+from nextcord import File
 from dotenv import load_dotenv
 import os
 
 from models.userModel import User
-from models.paginacionModel import Paginacion
-
+from models.paginationModel import Pagination
 
 from database.conexion import users_collection,cards_collection
 from datetime import datetime, timedelta
@@ -28,24 +28,32 @@ async def on_ready():
 
 
 #camandos
+
 # Comando para mostrar las cartas
-@bot.slash_command(name="cards", description="Mostrar cartas")
-async def cards(interaction: nextcord.Interaction):
+
+@bot.slash_command(name="cartas", description="Muestra tus cartas obtenidas")
+async def cartas(interaction: nextcord.Interaction):
     user = interaction.user
     user_existing = users_collection.find_one({"user_id": user.id})
 
     if user_existing:
-        cartas = user_existing.get('jugadores')
+        cartas = user_existing.get("jugadores", [])
+
         if cartas:
-            view = Paginacion(cartas, user.id)
-            await view.mostrar_cartas(interaction)
+            # Crear la vista de paginación y el embed inicial
+            pagination = Pagination(cartas, user.id)
+            embed = pagination.create_embed()
+
+            # Enviar el mensaje con la paginación
+            await interaction.response.send_message(embed=embed, view=pagination)
         else:
-            await interaction.response.send_message("No tienes cartas en tu perfil.")
+            await interaction.response.send_message("No tienes cartas en tu inventario.")
     else:
         await interaction.response.send_message("No puedes utilizar este comando sin un perfil, utiliza `/p` para crear tu perfil.")
-
-
-
+        
+        
+        
+        
 #CLAIM DE CARTAS
 @bot.slash_command(name="claim", description="Reclamar cartas")
 async def claim(interaction: nextcord.Interaction):
@@ -74,6 +82,7 @@ async def claim(interaction: nextcord.Interaction):
 
             carta_nombre = carta.get('nombre', 'Carta desconocida')
 
+            # Actualizar la colección de usuarios
             users_collection.update_one(
                 {"user_id": user.id},
                 {"$inc": {"cartas": 1}} 
@@ -88,18 +97,35 @@ async def claim(interaction: nextcord.Interaction):
                 {"user_id": user.id},
                 {"$set": {"last_claim": datetime.utcnow()}}
             )
+            
+            # Inicializar el embed antes de cualquier comprobación
+            embed = nextcord.Embed(
+                title="¡Has reclamado una carta!",
+                description=f"Has obtenido la carta: {carta_nombre}",
+                color=nextcord.Color.green()
+            )
 
-            await interaction.response.send_message(f"✅ ¡Has reclamado la carta: {carta_nombre}!")
-
-    else:
-        await interaction.response.send_message("No puedes utilizar este comando sin un perfil, utiliza `/p` para crear tu perfil.")
-
+            image_path = f"assets/images/{carta_nombre}.png"
+            if not os.path.exists(image_path):  #
+                image_path = f"assets/images/{carta_nombre}.jpg"
+            
+            print(image_path)
+            # Verificar si la imagen existe y enviarla como archivo adjunto
+            if os.path.exists(image_path):
+                image_file = File(image_path, filename=f"{carta_nombre}.png")  # Enviar como archivo adjunto
+                embed.set_image(url=f"attachment://{carta_nombre}.png")
+                
+                # Enviar el mensaje con el embed y la imagen
+                await interaction.response.send_message(embed=embed, file=image_file)
+            else:
+                # Si no se encuentra la imagen, simplemente enviamos el embed sin imagen
+                await interaction.response.send_message(embed=embed)
 
 
 
 
 #GENERAR USUARIO
-@bot.slash_command(name="p", description="Ver información de un usuario")
+@bot.slash_command(name="p", description="Ver información del perfil")
 async def p(interaction: nextcord.Interaction):
     user = interaction.user  
     avatar_url = user.avatar.url if user.avatar else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
