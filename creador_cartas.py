@@ -54,7 +54,7 @@ def cargar_jugadores_db():
     
 def crear_carta(jugador):
     template_path = os.path.join(CARD_TEMPLATES_DIR, "default.png")  # Ajustar según plantilla disponible
-    font_path = os.path.join(FONTS_DIR, "DINPro CondBold.otf")
+    font_path = os.path.join(FONTS_DIR, "CruyffSans-Bold.ttf")
     
     if not os.path.exists(template_path):
         print("Plantilla de carta no encontrada.")
@@ -103,7 +103,7 @@ def crear_carta(jugador):
 
 def crear_carta_db(jugador):
     template_path = os.path.join(CARD_TEMPLATES_DIR, "default.png")  # Ajustar según plantilla disponible
-    font_path = os.path.join(FONTS_DIR, "DINPro CondBold.otf")
+    font_path = os.path.join(FONTS_DIR, "CruyffSans-Bold.ttf")
     
     if not os.path.exists(template_path):
         print("Plantilla de carta no encontrada.")
