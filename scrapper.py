@@ -39,7 +39,7 @@ def get_stat_value(element):
         return 0  # En caso de error, asigna 0 como valor por defecto
 
 def scrape_page(page):
-    url = BASE_URL + str(page) + "&version=gold_rare&gender=men"
+    url = BASE_URL + str(page) + "&version=bronze_rare&gender=men"
     print(f"Scrapeando: {url}")
     driver.get(url)
 
@@ -141,7 +141,7 @@ def scrape_page(page):
 
     print(f"✅ Página {page} completada.")
 
-def scrape_all(pages=5):
+def scrape_all(pages=79):
     for i in range(1, pages + 1):
         scrape_page(i)
         time.sleep(3)  # Pausa entre páginas para evitar bloqueos
@@ -165,7 +165,7 @@ def scrape_all(pages=5):
         "PHY": physicalities,
         "Precio": prices
     })
-    df.to_csv("cartas_oro_raras.csv", index=False)
+    df.to_csv("cartas_bronze_raras.csv", index=False)
     print("✅ Datos guardados en 'cartas.csv'.")
 
 # Ejecutar el scraper 
