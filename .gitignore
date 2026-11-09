@@ -169,3 +169,12 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# --- FutGolMasterBot ---
+# Datos y medios obtenidos de terceros: se mantienen solo en local, nunca en el repo
+data/
+assets/renders/
+assets/cartas/
+NoEncontrados.csv
+simulacion_partido.txt
+chromedriver*
