@@ -1,13 +1,19 @@
+"""Scraper de cartas desde futbin.com hacia data/ (carpeta local, ignorada por git).
+
+Uso:
+    python -m scraper.futbin --version bronze_rare --paginas 21 --salida data/cartas_bronze_raras.csv
+"""
+import argparse
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
 import time
-from price import get_price  # Importar la función de cálculo de precios
+from scraper.precios import get_price  # Importar la función de cálculo de precios
 
-# Configurar Chrome indetectable
-driver = uc.Chrome()
+driver = None  # se inicializa en main()
+VERSION = "bronze_rare"
 
 # URL base de Futbin
 BASE_URL = "https://www.futbin.com/players?page="
@@ -39,7 +45,7 @@ def get_stat_value(element):
         return 0  # En caso de error, asigna 0 como valor por defecto
 
 def scrape_page(page):
-    url = BASE_URL + str(page) + "&version=bronze_rare&gender=men"
+    url = BASE_URL + str(page) + "&version=" + VERSION + "&gender=men"
     print(f"Scrapeando: {url}")
     driver.get(url)
 
@@ -141,7 +147,7 @@ def scrape_page(page):
 
     print(f"✅ Página {page} completada.")
 
-def scrape_all(pages=79):
+def scrape_all(pages=79, salida="data/cartas.csv"):
     for i in range(1, pages + 1):
         scrape_page(i)
         time.sleep(3)  # Pausa entre páginas para evitar bloqueos
@@ -165,11 +171,24 @@ def scrape_all(pages=79):
         "PHY": physicalities,
         "Precio": prices
     })
-    df.to_csv("cartas_bronze_raras.csv", index=False)
-    print("✅ Datos guardados en 'cartas.csv'.")
+    df.to_csv(salida, index=False)
+    print(f"✅ Datos guardados en '{salida}'.")
 
-# Ejecutar el scraper 
-scrape_all(pages=21)
+def main():
+    global driver, VERSION
+    parser = argparse.ArgumentParser(description="Scrapea cartas de futbin a un CSV.")
+    parser.add_argument("--version", default="bronze_rare", help="Filtro de versión de futbin (ej: gold_rare)")
+    parser.add_argument("--paginas", type=int, default=21)
+    parser.add_argument("--salida", default="data/cartas.csv")
+    args = parser.parse_args()
 
-# Cerrar el navegador
-driver.quit()
+    VERSION = args.version
+    driver = uc.Chrome()
+    try:
+        scrape_all(pages=args.paginas, salida=args.salida)
+    finally:
+        driver.quit()
+
+
+if __name__ == "__main__":
+    main()

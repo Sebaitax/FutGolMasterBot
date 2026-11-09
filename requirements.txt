@@ -1,0 +1,14 @@
+# Bot
+nextcord
+pymongo
+python-dotenv
+pillow
+
+# Scripts de datos y scraping
+pandas
+requests
+selenium
+undetected-chromedriver
+
+# Simulador de partidos con IA (prototipo)
+openai

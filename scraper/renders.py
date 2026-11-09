@@ -1,3 +1,12 @@
+"""Descarga renders de jugadores desde renderz.app a assets/renders/.
+
+Uso:
+    python -m scraper.renders data/cartas_ejemplo.csv
+
+Los renders quedan como assets/renders/<Nombre>_<OVR>.png, que es lo que
+busca cartas/generador.py. La carpeta está en .gitignore: no se sube al repo.
+"""
+import argparse
 import os
 import pandas as pd
 import undetected_chromedriver as uc
@@ -7,13 +16,15 @@ from selenium.webdriver.support import expected_conditions as EC
 import requests
 import time
 
-# Configurar Chrome indetectable
-driver = uc.Chrome()
+from cartas.generador import RENDERS
+
+driver = None  # se inicializa en main()
 
 # Lista para jugadores no encontrados
 no_encontrados = []
 
-def search_and_download_image(player_name, overall):
+def search_and_download_image(player_name, overall, nombre_archivo=None):
+    nombre_archivo = nombre_archivo or player_name
     search_url = "https://renderz.app"
     driver.get(search_url)
     
@@ -62,12 +73,11 @@ def search_and_download_image(player_name, overall):
         image_element = driver.find_element(By.XPATH, "//img[contains(@class, 'action-shot')]")
         image_url = image_element.get_attribute("src")
         
-        folder_path = os.path.join("assets", "images", "FotosJugador", f"{player_name}_{overall}")
-        os.makedirs(folder_path, exist_ok=True)
+        os.makedirs(RENDERS, exist_ok=True)
 
         response = requests.get(image_url)
         if response.status_code == 200:
-            image_path = os.path.join(folder_path, f"{player_name}.png")
+            image_path = os.path.join(RENDERS, f"{nombre_archivo}_{overall}.png")
             with open(image_path, "wb") as file:
                 file.write(response.content)
             print(f"Imagen de {player_name} descargada correctamente en {image_path}")
@@ -80,27 +90,36 @@ def search_and_download_image(player_name, overall):
     
     return True
 
-# Leer el archivo CSV y recorrer los jugadores
-csv_file = "CSV/cartas_bronce.csv"
-df = pd.read_csv(csv_file)
+def main():
+    global driver
+    parser = argparse.ArgumentParser(description="Descarga renders de los jugadores de un CSV.")
+    parser.add_argument("csv", help="CSV con columnas Nombre, Alias y OVR")
+    args = parser.parse_args()
 
-for index, row in df.iterrows():
-    player_name = row["Nombre"].strip()
-    alias = row["Alias"].strip()
-    overall = row["OVR"]
-    
-    encontrado = search_and_download_image(player_name, overall)
-    if not encontrado:
-        encontrado = search_and_download_image(alias, overall)
-    
-    if not encontrado:
-        no_encontrados.append([player_name, alias, overall])
+    driver = uc.Chrome()
+    df = pd.read_csv(args.csv)
 
-# Guardar los jugadores no encontrados en un CSV
-if no_encontrados:
-    df_no_encontrados = pd.DataFrame(no_encontrados, columns=["Nombre", "Alias", "OVR"])
-    df_no_encontrados.to_csv("NoEncontrados.csv", index=False)
-    print("Se han guardado los jugadores no encontrados en NoEncontrados.csv")
+    for _, row in df.iterrows():
+        player_name = str(row["Nombre"]).strip()
+        alias = str(row["Alias"]).strip()
+        overall = row["OVR"]
 
-# Cerrar el navegador al finalizar
-driver.quit()
+        encontrado = search_and_download_image(player_name, overall)
+        if not encontrado:
+            # Se busca por alias, pero se guarda con el nombre completo
+            encontrado = search_and_download_image(alias, overall, nombre_archivo=player_name)
+
+        if not encontrado:
+            no_encontrados.append([player_name, alias, overall])
+
+    # Guardar los jugadores no encontrados en un CSV
+    if no_encontrados:
+        df_no_encontrados = pd.DataFrame(no_encontrados, columns=["Nombre", "Alias", "OVR"])
+        df_no_encontrados.to_csv("NoEncontrados.csv", index=False)
+        print("Se han guardado los jugadores no encontrados en NoEncontrados.csv")
+
+    driver.quit()
+
+
+if __name__ == "__main__":
+    main()

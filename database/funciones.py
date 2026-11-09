@@ -3,7 +3,7 @@ from database.conexion import users_collection
 # Crear un usuario
 def crear_usuario(discord_id, nombre, saldo=1000, eslogan=""):
     usuario = {
-        "discord_id": discord_id,
+        "user_id": discord_id,
         "nombre": nombre,
         "saldo": saldo,
         "victorias": {"amistosos": 0, "liga": 0},
@@ -19,13 +19,13 @@ def crear_usuario(discord_id, nombre, saldo=1000, eslogan=""):
 
 # Obtener un usuario
 def obtener_usuario(discord_id):
-    usuario = users_collection.find_one({"discord_id": discord_id})
+    usuario = users_collection.find_one({"user_id": discord_id})
     return usuario if usuario else "Usuario no encontrado."
 
 # Actualizar saldo del usuario
 def actualizar_saldo(discord_id, cantidad):
     resultado = users_collection.update_one(
-        {"discord_id": discord_id},
+        {"user_id": discord_id},
         {"$inc": {"saldo": cantidad}}
     )
     return resultado.modified_count > 0
@@ -38,28 +38,28 @@ def agregar_plantilla(discord_id, nombre_plantilla, cartas, estadio):
         "estadio": estadio
     }
     resultado = users_collection.update_one(
-        {"discord_id": discord_id},
+        {"user_id": discord_id},
         {"$push": {"plantillas": nueva_plantilla}}
     )
     return resultado.modified_count > 0
 
 # Obtener las plantillas de un usuario
 def obtener_plantillas(discord_id):
-    usuario = users_collection.find_one({"discord_id": discord_id})
+    usuario = users_collection.find_one({"user_id": discord_id})
     return usuario.get("plantillas", []) if usuario else "Usuario no encontrado."
 
 # Actualizar estadísticas después de un partido
 def actualizar_estadisticas(discord_id, tipo_partido, resultado):
     campo = f"{'victorias' if resultado == 'victoria' else 'derrotas'}.{tipo_partido}"
     resultado = users_collection.update_one(
-        {"discord_id": discord_id},
+        {"user_id": discord_id},
         {"$inc": {campo: 1}}
     )
     return resultado.modified_count > 0
 
 # Eliminar un usuario
 def eliminar_usuario(discord_id):
-    resultado = users_collection.delete_one({"discord_id": discord_id})
+    resultado = users_collection.delete_one({"user_id": discord_id})
     return resultado.deleted_count > 0
 
 
