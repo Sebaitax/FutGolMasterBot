@@ -1,0 +1,45 @@
+{% set est = detalle.estadisticas %}
+{% if detalle.razones %}
+{% set gl, gv = partido.goles_local, partido.goles_visita %}
+{% set gm, gr = (gl, gv) if detalle.lado == 0 else (gv, gl) %}
+<section class="tarjeta">
+  <h3>{{ "¿Por qué ganaste?" if gm > gr else "¿Por qué perdiste?" if gm < gr else "Claves del empate" }}</h3>
+  <ul class="razones">
+    {% for icono, texto in detalle.razones %}<li style="animation-delay: {{ loop.index0 * 90 }}ms"><span>{{ icono }}</span><span>{{ texto }}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+<section class="tarjeta">
+  <h3>Estadísticas</h3>
+  {% if detalle.mvp and detalle.mvp[1] %}
+  <p class="mvp">🏆 Jugador del partido: <strong>{{ detalle.mvp[1] }}</strong> · nota {{ detalle.mvp[2] }}</p>
+  {% endif %}
+  <div class="barras-est">
+    {% for etiqueta, clave, sufijo in [("Posesión","posesion","%"),("Tiros","tiros",""),("Al arco","a_puerta",""),("Córners","corners",""),("Faltas","faltas",""),("Amarillas","amarillas",""),("Rojas","rojas","")] %}
+    {% set a, b = est[0][clave], est[1][clave] %}
+    {% set tot = (a + b) or 1 %}
+    <div class="be">
+      <b>{{ a }}{{ sufijo }}</b><span>{{ etiqueta }}</span><b>{{ b }}{{ sufijo }}</b>
+      <div class="be-barra"><i style="width: {{ (100 * a / tot)|round }}%; animation-delay: {{ loop.index0 * 80 }}ms"></i><i style="width: {{ (100 * b / tot)|round }}%; animation-delay: {{ loop.index0 * 80 }}ms"></i></div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="dos">
+    {% for a in detalle.alineaciones %}
+    <div>
+      {% set n = partido.local if loop.index0 == 0 else partido.visita %}<h4>{{ escudo(n, "chico") }} {{ n }}</h4>
+      <p class="tenue">{{ a.formacion }} · {{ a.mentalidad }}</p>
+      <ul class="once">{% for j in a.titulares %}<li><small>{{ j.puesto|pos }}</small> {{ j.nombre }} <small>{{ j.ovr }}</small></li>{% endfor %}</ul>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% if otros %}
+<section class="tarjeta">
+  <h3>Resto de la fecha {{ partido.fecha }}</h3>
+  {% for r in otros %}
+  <div class="resultado chico"><span>{{ r.local }} {{ escudo(r.local, "chico") }}</span><strong>{{ r.goles_local }} - {{ r.goles_visita }}</strong><span>{{ escudo(r.visita, "chico") }} {{ r.visita }}</span></div>
+  {% endfor %}
+</section>
+{% endif %}
+<div class="fila"><a class="boton primario" href="/">Continuar</a><a class="boton" href="/tabla">Ver tabla</a></div>

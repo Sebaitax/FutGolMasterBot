@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta centrada">
+  <h1>FutGolMaster</h1>
+  <p>Crea tu club y juega la Liga de Primera contra los 15 clubes de la liga. Empiezas con un plantel modesto: gana partidos, junta monedas, abre sobres y pelea el título.</p>
+  <form method="post" action="/crear" class="fila">
+    <input name="nombre_club" placeholder="Nombre de tu club" maxlength="40" required autofocus>
+    <button class="primario">Crear club</button>
+  </form>
+</section>
+{% endblock %}

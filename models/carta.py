@@ -15,6 +15,30 @@ ETIQUETAS = {
 }
 
 
+# Abreviaturas en español para mostrar (internamente se usan los códigos en inglés)
+POSICIONES_ES = {
+    "GK": "POR",   # portero
+    "CB": "DFC",   # defensa central
+    "LB": "LI",    # lateral izquierdo
+    "RB": "LD",    # lateral derecho
+    "LWB": "CAI",  # carrilero izquierdo
+    "RWB": "CAD",  # carrilero derecho
+    "CDM": "MCD",  # mediocentro defensivo
+    "CM": "MC",    # mediocentro
+    "CAM": "MCO",  # mediocentro ofensivo
+    "LM": "MI",    # medio izquierdo
+    "RM": "MD",    # medio derecho
+    "LW": "EI",    # extremo izquierdo
+    "RW": "ED",    # extremo derecho
+    "ST": "DC",    # delantero centro
+    "CF": "SD",    # segundo delantero
+}
+
+
+def posicion_es(codigo: str) -> str:
+    return POSICIONES_ES.get(str(codigo).upper(), codigo)
+
+
 def nivel_por_ovr(ovr: int) -> str:
     """Devuelve el nivel de la carta según su valoración general."""
     if ovr >= 75:
@@ -51,7 +75,7 @@ class Carta:
     @property
     def nombre_corto(self) -> str:
         """Nombre que se imprime en la carta (alias si existe)."""
-        return (self.alias or self.nombre).strip()
+        return (self.alias or self.nombre).replace('"', "").replace("“", "").replace("”", "").strip()
 
     # ---------- Conversión ----------
 

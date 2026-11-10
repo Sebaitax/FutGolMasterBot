@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta">
+  <h2>Sobres</h2>
+  <p class="tenue">Cada carta sale de un nivel según las probabilidades de abajo. Bronce: OVR menor a 65 · Plata: 65 a 74 · Oro: 75 o más.</p>
+  <p class="tenue">Además pueden salir <b>escudos y estadios de colección</b> (tienes {{ objetos_tengo }} de {{ objetos_total }}). Se equipan en tu club desde el Inventario o el Perfil.</p>
+  <div class="sobres">
+    <div class="sobre-prod gratis" id="prod-gratis">
+      <div class="sobre-arte gratis"><span>GRATIS</span><small>1 carta</small></div>
+      <h3>Carta gratis</h3>
+      <ul>
+        {% for nivel, pr in prob_gratis.items() %}
+        <li><span class="punto {{ nivel }}"></span>{{ nivel|capitalize }} <b>{{ "%g"|format(pr * 100) }}%</b></li>
+        {% endfor %}
+      </ul>
+      <button class="primario" id="btn-gratis" data-espera="{{ espera_gratis }}">Reclamar</button>
+      <small class="tenue">Una cada 8 horas. Las repetidas sirven para mejorar.</small>
+    </div>
+    {% for clave, s in sobres.items() %}
+    <div class="sobre-prod {{ clave }}">
+      <div class="sobre-arte {{ clave }}"><span>FGM</span><small>{{ s.cartas }} cartas</small></div>
+      <h3>{{ s.nombre }}</h3>
+      <ul>
+        {% for nivel, p in s.probabilidades.items() if p > 0 %}
+        <li><span class="punto {{ nivel }}"></span>{{ nivel|capitalize }} <b>{{ "%g"|format(p * 100) }}%</b></li>
+        {% endfor %}
+        <li class="obj-prob">🏟️ Escudo o estadio: <b>{{ "%g"|format(s.objeto * 100) }}%</b> por carta</li>
+      </ul>
+      <button class="primario abrir" data-clave="{{ clave }}" data-precio="{{ s.precio }}">🪙 {{ s.precio|miles }}</button>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- apertura: una carta a la vez -->
+<div class="apertura" id="apertura" hidden>
+  <button class="ap-saltar enlace" id="ap-saltar">Saltar ⏭</button>
+  <div class="ap-escena">
+    <div class="ap-pila" id="ap-pila"></div>
+    <div class="ap-sobre" id="ap-sobre">
+      <div class="ap-tira"></div>
+      <span>FGM</span><small id="ap-nombre"></small>
+    </div>
+  </div>
+  <p class="ap-ayuda" id="ap-ayuda"></p>
+  <div class="ap-reveladas" id="ap-reveladas"></div>
+  <div class="ap-botones" id="ap-botones" hidden>
+    <a class="boton" href="/plantel">Ir al plantel</a>
+    <button class="primario" id="ap-cerrar">Seguir comprando</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const {carta, reanimar, api, toast, confeti, esc} = FGM;
+  const $ = id => document.getElementById(id);
+  const ap = $('apertura'), sobre = $('ap-sobre'), pila = $('ap-pila'), reveladas = $('ap-reveladas'), ayuda = $('ap-ayuda');
+  const RANGO = {bronce: 0, plata: 1, oro: 2};
+  let cola = [], total = 0, estado = 'cerrado';
+
+  function actualizarBotones() {
+    const m = +$('monedas').dataset.valor;
+    document.querySelectorAll('.abrir').forEach(b => b.disabled = m < +b.dataset.precio);
+  }
+
+  document.querySelectorAll('.abrir').forEach(b => b.onclick = async () => {
+    let r;
+    try { r = await api('/api/sobre/' + b.dataset.clave); }
+    catch (e) { toast(e.message, {error: true}); return; }
+    FGM.monedas(r.monedas);
+    abrir(b.dataset.clave, b.closest('.sobre-prod').querySelector('h3').textContent, r.cartas.concat(r.objetos || []));
+  });
+
+  // 1) el sobre cerrado
+  // cara de un objeto de colección dentro de la apertura
+  function caraObjeto(o) {
+    return `<div class="obj-cara obj-cara-${o.tipo} ${o.nivel}">${FGM.objeto(o, true)}</div>` +
+      `<p><b>${o.tipo === 'escudo' ? 'Escudo' : 'Estadio'} de colección</b><br><small>${esc(o.nombre)}${o.capacidad ? ' · ' + o.capacidad.toLocaleString('es-CL') + ' personas' : ''}</small></p>`;
+  }
+
+  function abrir(clave, nombre, cartas) {
+    // de menor a mayor: la mejor carta sale al final
+    // de menor a mayor; a igual rareza, los objetos de colección al final
+    cola = cartas.slice().sort((a, b) => RANGO[a.nivel] - RANGO[b.nivel] || (a.ovr || 999) - (b.ovr || 999));
+    total = cola.length;
+    pila.innerHTML = ''; reveladas.innerHTML = '';
+    $('ap-botones').hidden = true; $('ap-saltar').hidden = false;
+    $('ap-nombre').textContent = nombre;
+    sobre.className = 'ap-sobre ' + clave;
+    if (cola.some(c => c.nivel === 'oro')) sobre.classList.add('brilla');
+    ap.hidden = false;
+    reanimar(sobre, 'agita');
+    ayuda.textContent = 'Toca el sobre para abrirlo';
+    estado = 'sobre';
+  }
+
+  // 2) se rompe y aparece la pila boca abajo
+  sobre.onclick = () => {
+    if (estado !== 'sobre') return;
+    estado = 'animando';
+    sobre.classList.add('rompe');
+    setTimeout(() => {
+      cola.forEach((c, i) => {
+        const el = document.createElement('div');
+        el.className = 'pcarta';
+        el.style.zIndex = total - i;
+        el.style.setProperty('--i', i);
+        el.innerHTML = `<div class="p-int">
+            <div class="cara dorso ${c.nivel}"><span>FGM</span></div>
+            <div class="cara frente">${c.tipo ? caraObjeto(c) : carta(c, {grande: true}) + `<p>${esc(c.completo)}<br><small>${esc(c.club)} · ${esc(FGM.pos(c.pos))}</small></p>`}</div>
+          </div>`;
+        pila.appendChild(el);
+      });
+      estado = 'pila';
+      prepararSiguiente();
+    }, 650);
+  };
+
+  function prepararSiguiente() {
+    const arriba = pila.querySelector('.pcarta:not(.fuera)');
+    if (!arriba) { terminar(); return; }
+    const n = total - cola.length + 1;
+    const c = cola[0];
+    // anticipo: la última carta, si es oro, brilla por detrás
+    if (cola.length === 1 && c.nivel !== 'bronce') arriba.classList.add('anticipo-' + c.nivel);
+    ayuda.innerHTML = `Toca la carta · <b>${n} / ${total}</b>`;
+  }
+
+  // 3) tocar: primero se da vuelta, después se va a la fila de reveladas
+  pila.onclick = () => {
+    if (estado !== 'pila') return;
+    const arriba = pila.querySelector('.pcarta:not(.fuera)');
+    if (!arriba) return;
+    const c = cola[0];
+    if (!arriba.classList.contains('volteada')) {
+      arriba.classList.add('volteada');
+      if (c.nivel === 'oro') { setTimeout(() => { confeti(90); reanimar(ap, 'destello'); }, 350); }
+      ayuda.innerHTML = cola.length > 1 ? `Toca para la siguiente · <b>${total - cola.length + 1} / ${total}</b>` : 'Toca para terminar';
+      return;
+    }
+    estado = 'animando';
+    arriba.classList.add('fuera');
+    cola.shift();
+    setTimeout(() => {
+      arriba.remove();
+      agregarRevelada(c);
+      estado = 'pila';
+      prepararSiguiente();
+    }, 450);
+  };
+
+  function agregarRevelada(c) {
+    const div = document.createElement('div');
+    div.className = 'ap-mini';
+    div.innerHTML = c.tipo ? FGM.objeto(c) : carta(c);
+    reveladas.appendChild(div);
+  }
+
+  function terminar() {
+    estado = 'fin';
+    $('ap-saltar').hidden = true;
+    ayuda.textContent = '¡Listo! Las cartas ya están en tu plantel.';
+    reveladas.classList.add('final');
+    $('ap-botones').hidden = false;
+  }
+
+  $('ap-saltar').onclick = () => {
+    if (estado === 'sobre') sobre.click();
+    const resto = () => {
+      if (estado === 'animando') { setTimeout(resto, 120); return; }
+      pila.innerHTML = '';
+      if (cola.some(c => c.nivel === 'oro')) confeti(90);
+      cola.forEach(agregarRevelada);
+      cola = [];
+      terminar();
+    };
+    resto();
+  };
+
+  $('ap-cerrar').onclick = () => { ap.hidden = true; estado = 'cerrado'; actualizarBotones(); };
+
+  // ---------- carta gratis cada 8 horas (cuenta regresiva)
+  const btnGratis = $('btn-gratis');
+  let finEspera = Date.now() + (+btnGratis.dataset.espera) * 1000;
+  function relojGratis() {
+    const resta = Math.max(0, Math.round((finEspera - Date.now()) / 1000));
+    btnGratis.disabled = resta > 0;
+    btnGratis.textContent = resta > 0
+      ? `⏳ ${Math.floor(resta / 3600)}:${String(Math.floor(resta / 60) % 60).padStart(2, '0')}:${String(resta % 60).padStart(2, '0')}`
+      : '🎁 Reclamar';
+    $('prod-gratis').classList.toggle('lista', resta === 0);
+  }
+  setInterval(relojGratis, 1000);
+  relojGratis();
+  btnGratis.onclick = async () => {
+    let r;
+    try { r = await api('/api/carta-gratis'); }
+    catch (e) { toast(e.message, {error: true}); return; }
+    finEspera = Date.now() + r.espera * 1000;
+    relojGratis();
+    FGM.monedas(r.monedas);
+    abrir('gratis', 'Carta gratis', r.cartas);
+  };
+  actualizarBotones();
+})();
+</script>
+{% endblock %}

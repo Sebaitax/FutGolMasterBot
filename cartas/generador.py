@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from models.carta import ETIQUETAS, STATS, Carta
+from models.carta import posicion_es, ETIQUETAS, STATS, Carta
 
 RAIZ = Path(__file__).resolve().parent.parent
 FUENTES = RAIZ / "assets" / "fonts"
@@ -93,8 +93,9 @@ def _silueta_jugador(acento) -> Image.Image:
 
 
 def buscar_render(carta: Carta) -> Path | None:
-    """Busca el render del jugador en assets/renders (nombre_ovr.png o nombre.png)."""
-    for nombre in (f"{carta.nombre}_{carta.ovr}.png", f"{carta.nombre}.png"):
+    """Busca el render del jugador en assets/renders: "Nombre (Club).png" (nombres repetidos),
+    "Nombre_OVR.png" o "Nombre.png"."""
+    for nombre in (f"{carta.nombre} ({carta.club}).png", f"{carta.nombre}_{carta.ovr}.png", f"{carta.nombre}.png"):
         ruta = RENDERS / nombre
         if ruta.exists():
             return ruta
@@ -138,7 +139,7 @@ def crear_carta(carta: Carta, render: str | Path | None = None) -> Image.Image:
     # --- Valoración, posición y nivel (columna izquierda) ---
     f_ovr = _fuente("Bold", 150)
     d.text((_px(40), _px(20)), str(carta.ovr), font=f_ovr, fill=texto)
-    d.text((_px(46), _px(178)), carta.posicion, font=_fuente("SemiBold", 58), fill=texto)
+    d.text((_px(46), _px(178)), posicion_es(carta.posicion), font=_fuente("SemiBold", 58), fill=texto)
     d.line([(_px(46), _px(256)), (_px(150), _px(256))], fill=(*acento, 255), width=_px(4))
     etiqueta_nivel = carta.nivel.upper() + (" · RARA" if carta.rara else "")
     d.text((_px(46), _px(268)), etiqueta_nivel, font=_fuente("Medium", 30), fill=texto)

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block contenido %}
+<div class="dash">
+<div class="dash-a">
+<section class="tarjeta">
+  {% if divisiones|length > 1 %}
+  <div class="tabs-div">
+    {% for d in divisiones %}
+    <a href="/tabla?division={{ d.n }}" class="tab-div {{ d.clave }} {{ 'activa' if d.n == division }}">
+      {{ d.nombre }}{% if d.n == mia %} <small>· tú</small>{% endif %}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <h2>{{ nombre_div_tabla }} · Temporada {{ temporada }}</h2>
+  {% if suben or bajan %}
+  <p class="tenue leyenda-zonas">
+    {% if suben %}<span class="z-sube"></span> suben {{ suben }}{% else %}<span class="z-campeon"></span> campeón{% endif %}
+    {% if bajan %} · <span class="z-baja"></span> bajan {{ bajan }}{% endif %}
+  </p>
+  {% endif %}
+  <div class="desliza">
+  <table class="tabla">
+    <thead><tr><th>#</th><th>Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>DG</th><th>Pts</th><th class="ocultable">Forma</th></tr></thead>
+    <tbody>
+    {% for f in tabla %}
+    {% if divisiones|length > 1 %}
+      {% set zona = ' zona-alta' if (suben and loop.index <= suben) or (not suben and loop.index == 1) else (' zona-baja' if bajan and loop.index > tabla|length - bajan else '') %}
+    {% else %}
+      {% set zona = ' zona-alta' if loop.index <= 4 else (' zona-baja' if loop.index > tabla|length - 2 else '') %}
+    {% endif %}
+    <tr class="{{ 'usuario' if f.usuario }}{{ zona }}" style="animation-delay: {{ loop.index0 * 30 }}ms">
+      <td>{{ loop.index }}</td><td class="nombre">{{ escudo(f.nombre, "chico") }} {{ f.nombre }}</td><td>{{ f.pj }}</td><td>{{ f.g }}</td><td>{{ f.e }}</td><td>{{ f.p }}</td>
+      <td>{{ "%+d"|format(f.dg) }}</td><td><strong>{{ f.pts }}</strong></td>
+      <td class="ocultable forma">{% for r in f.forma %}<i class="{{ r|lower }}">{{ r }}</i>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="tarjeta">
+  <div class="nav-fecha">
+    <a class="boton {{ 'off' if fecha <= 1 }}" href="/tabla?fecha={{ fecha - 1 }}">◀</a>
+    <h3>Fecha {{ fecha }} {% if fecha >= fecha_actual %}<small class="tenue">· por jugar</small>{% endif %}</h3>
+    <a class="boton {{ 'off' if fecha >= total }}" href="/tabla?fecha={{ fecha + 1 }}">▶</a>
+  </div>
+  {% for r in partidos %}
+  <div class="resultado chico {{ 'mio' if uid in (r.local_id, r.visita_id) }}">
+    <span>{{ r.local }} {{ escudo(r.local, "chico") }}</span>
+    {% if r.jugado %}
+      {% if r.detalle %}<a href="/partido/{{ r.id }}"><strong>{{ r.goles_local }} - {{ r.goles_visita }}</strong></a>
+      {% else %}<strong>{{ r.goles_local }} - {{ r.goles_visita }}</strong>{% endif %}
+    {% else %}<strong class="tenue">vs</strong>{% endif %}
+    <span>{{ escudo(r.visita, "chico") }} {{ r.visita }}</span>
+  </div>
+  {% endfor %}
+</section>
+
+</div>
+<aside class="dash-b">
+<section class="tarjeta">
+  <h3>Goleadores</h3>
+  <ul class="lista">
+    {% for g in goleadores %}
+    <li class="{{ 'usuario' if g.es_usuario }}"><span>{{ loop.index }}. {{ escudo(g.equipo, "chico") }} {{ g.alias or g.nombre }} <small class="tenue">{{ g.equipo }}</small></span><span>{{ g.goles }} ⚽</span></li>
+    {% else %}
+    <li class="tenue">Todavía no hay goles.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="tarjeta">
+  <h3>Tu fixture</h3>
+  <div class="fixture">
+    {% for r in fixture %}
+    {% set local = r.local_id == uid %}
+    {% set rival = r.visita if local else r.local %}
+    {% if r.jugado %}
+      {% set mios, suyos = (r.goles_local, r.goles_visita) if local else (r.goles_visita, r.goles_local) %}
+      {% set res = "g" if mios > suyos else "e" if mios == suyos else "p" %}
+    {% else %}{% set res = "" %}{% endif %}
+    <a class="fx {{ res }} {{ 'actual' if r.fecha == fecha_actual }}" href="{{ '/partido/' ~ r.id if r.detalle else '/tabla?fecha=' ~ r.fecha }}" title="Fecha {{ r.fecha }} · {{ 'local' if local else 'visita' }} vs {{ rival }}">
+      <small>F{{ r.fecha }}</small>{{ escudo(rival, "chico") }}
+      <b>{% if r.jugado %}{{ mios }}-{{ suyos }}{% else %}{{ "L" if local else "V" }}{% endif %}</b>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+</aside>
+</div>
+{% endblock %}

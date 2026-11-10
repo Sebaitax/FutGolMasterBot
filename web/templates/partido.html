@@ -1,0 +1,765 @@
+{% extends "base.html" %}
+{% block clase_body %}pantalla-partido{% endblock %}
+{% block contenido %}
+<section class="tarjeta marcador-vivo{{ ' con-foto' if partido.foto_estadio }}"{% if partido.foto_estadio %} style="--foto: url('{{ partido.foto_estadio }}')"{% endif %}>
+  <div class="mv-equipo">{{ escudo(partido.local, "grande") }}<span>{{ partido.local }}</span></div>
+  <div class="mv-centro">
+    <div class="mv-goles"><b id="g0">0</b><i>-</i><b id="g1">0</b></div>
+    <div class="mv-reloj"><span id="reloj">0'</span><small id="periodo">1T</small></div>
+  </div>
+  <div class="mv-equipo">{{ escudo(partido.visita, "grande") }}<span>{{ partido.visita }}</span></div>
+  <p class="mv-estadio">🏟️ {{ partido.estadio }}{% if partido.tipo == "amistoso" %} · <b>Amistoso</b>{% endif %}</p>
+</section>
+
+<div class="partido-grid">
+<section class="tarjeta">
+  <div class="estadio" id="estadio">
+    <div class="pasto"></div>
+    <div class="lin medio"></div><div class="lin circulo"></div>
+    <div class="lin area izq"></div><div class="lin area der"></div>
+    <div class="lin chica izq"></div><div class="lin chica der"></div>
+    <div class="punto izq"></div><div class="punto der"></div>
+    <div class="arco izq" id="arco-izq"></div><div class="arco der" id="arco-der"></div>
+    <div id="fichas"></div>
+    <div class="pelota" id="pelota"></div>
+    <div class="aviso-jugada" id="aviso-jugada"></div>
+    <div class="anuncio" id="anuncio"></div>
+  </div>
+
+  <div class="prob" id="prob" hidden>
+    <div class="prob-barra"><i id="pb0"></i><i id="pbe"></i><i id="pb1"></i></div>
+    <div class="prob-txt"><span id="pt0"></span><span id="pte"></span><span id="pt1"></span></div>
+  </div>
+  <div class="momentum-caja">
+    <svg class="momentum" id="momentum" viewBox="0 0 100 40" preserveAspectRatio="none" aria-label="Dominio minuto a minuto"><line x1="0" y1="20" x2="100" y2="20" class="mo-eje"/></svg>
+    <div class="mo-pie"><span id="pos0">50%</span><small>posesión</small><span id="pos1">50%</span></div>
+  </div>
+
+  {% if partido.modo != "repeticion" %}
+  <div class="tacticas" id="tacticas" hidden>
+    <div class="t-cab"><b>Táctica</b><small class="tenue" id="t-espera"></small><small class="t-rival" id="t-rival"></small></div>
+    <div class="t-chips" id="t-chips"></div>
+  </div>
+  {% endif %}
+  <div class="controles-vivo">
+    <button id="btn-pausa" class="chico-btn" hidden>⏸ Cambios</button>
+    <div class="velocidad" id="velocidad">
+      <button data-v="1" class="activo">x1</button><button data-v="2">x2</button><button data-v="4">x4</button>
+    </div>
+    <button id="saltar" class="enlace">Saltar ⏭</button>
+  </div>
+</section>
+
+<section class="tarjeta">
+  <ol id="relato" class="relato"></ol>
+</section>
+</div>
+
+<section id="post" hidden></section>
+
+<!-- pausas -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-caja" id="modal-caja"></div>
+</div>
+
+<script id="datos" type="application/json">{{ datos|safe }}</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('datos').textContent);
+  const {esc, carta, reanimar, confeti, api} = FGM;
+  const $ = id => document.getElementById(id);
+  const relato = $('relato'), pelota = $('pelota'), anuncio = $('anuncio'), estadio = $('estadio'), capa = $('fichas');
+  const nombres = [D.local, D.visita];
+  const VIVO = D.modo === 'vivo';
+  const COLORES = D.colores || ['#f4f6f8', '#e5534b'];
+  const TIROS = ['gol', 'atajada', 'desviado', 'palo'];
+  const clave = (t, m) => t * 1000 + m;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const tope = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // ---------- estado de reproducción
+  let lineas = [], posesion = [], iLinea = 0, iMin = 0, eventos = 0;
+  let pausa = null, final = false, velocidad = 1, saltando = false, generacion = 0;
+  let reanudar = -1, bloqueo = -1, ahora = [1, 0], enJugada = false, terminado = false;
+  let pedidos = [];
+  const vivo = {tactica: 'normal', tactica_rival: 'normal', pausas_restantes: D.pausas_max || 0, cambios_restantes: 5, ultima_tactica: null};
+  const goles = [0, 0], cuenta = [0, 0];
+  const RITMO = 1.8;   // x1 = ritmo cómodo de ver; x2 y x4 aceleran desde ahí
+  const T = ms => ms * RITMO / velocidad;
+  const dormir = ms => saltando ? Promise.resolve() : new Promise(r => setTimeout(r, T(ms)));
+
+  function agregar(r) {
+    lineas.push(...r.lineas);
+    posesion = r.posesion;
+    eventos = r.eventos;
+    pausa = r.pausa;
+    final = r.final;
+    if (VIVO) {
+      for (const k of ['tactica', 'pausas_restantes', 'cambios_restantes', 'ultima_tactica']) if (k in r) vivo[k] = r[k];
+      pintarControles();
+    }
+  }
+
+  // ---------- jugadores en la cancha (horizontal: el local ataca hacia la derecha)
+  const fichas = [[], []];
+  function ubicar(f, x, y, ms = 600) {
+    if (!f) return;
+    f.x = x; f.y = y;
+    f.el.style.transitionDuration = saltando ? '0s' : T(ms) + 'ms';
+    f.el.style.left = x + '%'; f.el.style.top = y + '%';
+  }
+  function apellido(n) {
+    const p = String(n).trim().split(/\s+/);
+    return p.length > 1 && p[0].length <= 3 ? p.slice(1).join(' ') : p[p.length - 1];
+  }
+  (D.equipos || []).forEach((e, eq) => {
+    const puestos = D.formaciones[e.formacion], coords = D.coordenadas[e.formacion];
+    if (!puestos || !coords) return;
+    e.jugadores.forEach((nombre, slot) => {
+      const el = document.createElement('div');
+      el.className = 'ficha' + (puestos[slot] === 'GK' ? ' arquero' : '') + (eq === D.lado ? ' mia' : '');
+      el.style.setProperty('--c', COLORES[eq]);
+      el.innerHTML = `<i></i><span>${esc(apellido(nombre))}</span>`;
+      el.title = nombre;
+      capa.appendChild(el);
+      const [cx, cy] = coords[slot];
+      const prof = 7 + (100 - cy) * 0.46;     // profundidad desde el propio arco
+      const base = eq === 0 ? [prof, cx] : [100 - prof, 100 - cx];
+      const f = {el, nombre, eq, puesto: puestos[slot], linea: FGM.linea(puestos[slot]), base, x: 0, y: 0, activo: true};
+      fichas[eq].push(f);
+      ubicar(f, base[0], base[1], 0);
+    });
+  });
+  const activas = eq => fichas[eq].filter(f => f.activo);
+  const buscar = (eq, nombre) => nombre ? activas(eq).find(f => f.nombre === nombre) : null;
+  const arquero = eq => activas(eq).find(f => f.puesto === 'GK');
+  function elegir(eq, lineasOk) {
+    const c = activas(eq).filter(f => f.puesto !== 'GK' && lineasOk.includes(f.linea));
+    const todos = c.length ? c : activas(eq).filter(f => f.puesto !== 'GK');
+    return todos[Math.floor(Math.random() * todos.length)];
+  }
+  // los dos bloques se mueven según quién tiene la pelota
+  function formar(eqBalon, empuje = 1, ms = 650) {
+    for (const eq of [0, 1]) for (const f of activas(eq)) {
+      const dir = eq === 0 ? 1 : -1;
+      let [x, y] = f.base;
+      if (eqBalon === eq) x += dir * (f.puesto === 'GK' ? 5 : (f.linea === 'DEF' ? 11 : 17) * empuje);
+      else if (eqBalon >= 0 && f.puesto !== 'GK') { x -= dir * (f.linea === 'DEL' ? 9 : 3) * empuje; y = 50 + (y - 50) * 0.86; }
+      if (f.puesto !== 'GK' && eqBalon >= 0) { x += rnd(-2.5, 2.5); y += rnd(-4, 4); }
+      ubicar(f, tope(x, 3, 97), tope(y, 6, 94), ms);
+    }
+  }
+
+  // ---------- la pelota
+  let bx = 50, by = 50, conPelota = null;
+  pelota.style.left = '50%'; pelota.style.top = '50%';
+  function pelotaA(x, y, ms, {alto = 0} = {}) {
+    const ini = {left: bx + '%', top: by + '%', transform: 'translate(-50%,-50%) scale(1)'};
+    const fin = {left: x + '%', top: y + '%', transform: 'translate(-50%,-50%) scale(1)'};
+    const [x0, y0] = [bx, by];
+    bx = x; by = y;
+    pelota.style.left = x + '%'; pelota.style.top = y + '%';
+    if (saltando) return Promise.resolve();
+    const frames = alto ? [ini, {left: (x0 + x) / 2 + '%', top: (y0 + y) / 2 + '%',
+                                 transform: `translate(-50%,-50%) scale(${1 + alto})`, offset: .5}, fin] : [ini, fin];
+    const anim = pelota.animate(frames, {duration: T(ms), easing: 'ease-in-out'});
+    // tope de tiempo: si el navegador congela la animación (pestaña oculta), el partido sigue igual
+    return Promise.race([anim.finished.catch(() => {}), new Promise(r => setTimeout(r, T(ms) + 60))]);
+  }
+  function portador(f) {
+    if (conPelota) conPelota.el.classList.remove('con-pelota');
+    conPelota = f || null;
+    if (f) f.el.classList.add('con-pelota');
+  }
+  async function pasar(f, ms = 380, opts) {
+    if (!f) return;
+    portador(f);
+    await pelotaA(f.x + (f.eq === 0 ? 1.3 : -1.3), f.y + 1.6, ms, opts);
+  }
+  function aviso(texto, clase = '') {
+    if (saltando) return;
+    const a = $('aviso-jugada');
+    a.textContent = texto; a.className = 'aviso-jugada visible ' + clase;
+    clearTimeout(aviso.t); aviso.t = setTimeout(() => a.className = 'aviso-jugada', T(1300));
+  }
+  function anunciar(html, clase, ms = 1600) {
+    if (saltando) return;
+    anuncio.innerHTML = html; anuncio.className = 'anuncio visible ' + (clase || '');
+    clearTimeout(anunciar.t); anunciar.t = setTimeout(() => anuncio.className = 'anuncio', ms / Math.min(velocidad, 2));
+  }
+
+  // ---------- relato
+  function escribir(l) {
+    if (l._escrita) return;
+    l._escrita = true;
+    const li = document.createElement('li');
+    li.className = 'linea entra ' + l.tipo + (l.equipo === D.lado ? ' propio' : '');
+    const texto = esc(l.texto).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    li.innerHTML = (l.minuto ? `<b>${esc(l.minuto)}</b>` : '') + `<span>${texto}</span>`;
+    relato.prepend(li);
+    if (l.marcador && l.tipo !== 'gol') { goles[0] = l.marcador[0]; goles[1] = l.marcador[1]; }
+  }
+
+  // cambios de jugadores en la cancha (también al saltar)
+  function plantel(l) {
+    if (l._plantel) return;
+    l._plantel = true;
+    if (l.tipo === 'cambio') {
+      const f = buscar(l.equipo, l.sale);
+      if (f) {
+        f.nombre = l.jugador; f.el.title = l.jugador;
+        f.el.querySelector('span').textContent = apellido(l.jugador);
+        f.el.classList.remove('amonestado');
+        if (!saltando) reanimar(f.el, 'entra-jug');
+      }
+    } else if (l.tipo === 'roja') {
+      const f = buscar(l.equipo, l.jugador);
+      if (f) { f.activo = false; f.el.classList.add('fuera'); }
+    } else if (l.tipo === 'amarilla') {
+      const f = buscar(l.equipo, l.jugador);
+      if (f) f.el.classList.add('amonestado');
+    } else if (l.tipo === 'tactica' && l.equipo !== D.lado) {
+      vivo.tactica_rival = l.tactica; pintarControles();
+    } else if (l.tipo === 'gol' && saltando) {
+      goles[0] = l.marcador[0]; goles[1] = l.marcador[1];
+    }
+  }
+
+  // ---------- jugadas
+  function marcarGol(l) {
+    const eq = l.equipo;
+    goles[0] = l.marcador[0]; goles[1] = l.marcador[1];
+    const el = $('g' + eq); el.textContent = goles[eq]; reanimar(el, 'golazo');
+    reanimar(estadio, 'sacude');
+    reanimar($(eq === 0 ? 'arco-der' : 'arco-izq'), 'red');
+    anunciar(`<b>¡GOL!</b><span>${esc(l.jugador)} · ${esc(nombres[eq])}</span>`, 'gol', 2200);
+    if (eq === D.lado) confeti(60);
+  }
+  const ladoY = (lado, eqT) => 50 + ({izq: -1, centro: 0, der: 1}[lado] || 0) * (eqT === 0 ? 1 : -1) * 4.2;
+
+  async function jugadaTiro(l) {
+    const eqT = l.tipo === 'atajada' ? 1 - l.equipo : l.equipo;   // quién remata
+    const dir = eqT === 0 ? 1 : -1;
+    const tir = buscar(eqT, l.tipo === 'atajada' ? l.tirador : l.jugador) || elegir(eqT, ['DEL']);
+    const asis = l.asistente ? buscar(eqT, l.asistente) : null;
+    const arq = arquero(1 - eqT);
+    if (l.penal) {
+      if (!enJugada) await prepararPenal({equipo: eqT, jugador: tir && tir.nombre});
+      await dormir(350);
+    } else if (enJugada) {
+      if (tir && conPelota !== tir) await pasar(tir, 420);   // pasaste la pelota en el momento clave
+    } else {
+      aviso('¡Se viene!');
+      formar(eqT, 1.35, 700);
+      if (tir) ubicar(tir, eqT === 0 ? rnd(78, 86) : rnd(14, 22), rnd(32, 68), 700);
+      await pasar(asis && asis !== tir ? asis : elegir(eqT, ['MED']), 460);
+      await dormir(120);
+      await pasar(tir, 520, {alto: /centro/.test(l.jugada || '') ? .9 : .15});
+      await dormir(200);
+    }
+    enJugada = false;
+    estadio.classList.remove('lento');
+    // remate
+    let ty = l.lado ? ladoY(l.lado, eqT) : rnd(45.5, 54.5);
+    if (l.tipo === 'desviado') ty = l.lado && l.lado !== 'centro' ? 50 + Math.sign(ty - 50) * 10 : (Math.random() < .5 ? rnd(31, 41) : rnd(59, 69));
+    if (l.tipo === 'palo') ty = Math.random() < .5 ? 44.2 : 55.8;
+    if (arq) {
+      const ay = l.tipo === 'atajada' ? ty : l.adivina ? ladoY(l.adivina, eqT) : 50 + (ty < 50 ? 3.5 : -3.5);
+      ubicar(arq, eqT === 0 ? 96.6 : 3.4, ay, 240);
+      if (!saltando) { arq.el.classList.add('vuela'); setTimeout(() => arq.el.classList.remove('vuela'), T(800)); }
+    }
+    portador(null);
+    const destinoX = l.tipo === 'atajada' ? (eqT === 0 ? 96 : 4) : (eqT === 0 ? 99.3 : 0.7) + (l.tipo === 'desviado' ? dir * 2 : 0);
+    await pelotaA(destinoX, ty, l.penal ? 360 : 320, {alto: .3});
+    if (l.tipo === 'gol') {
+      marcarGol(l); escribir(l);
+      // festejo: los compañeros van hacia el goleador
+      if (tir && !saltando) activas(eqT).filter(f => f.puesto !== 'GK').forEach(f => ubicar(f, tir.x - dir * rnd(2, 8), tir.y + rnd(-8, 8), 900));
+      await dormir(2300);
+      formar(-1, 1, 800);
+      await pelotaA(50, 50, 500);
+    } else {
+      escribir(l);
+      if (l.tipo === 'atajada') { anunciar('<b>🧤 ¡Atajada!</b>', 'atajada', 1100); await pelotaA(eqT === 0 ? 87 : 13, tope(ty + rnd(-20, 20), 10, 90), 320); }
+      else if (l.tipo === 'palo') { anunciar('<b>¡PALO!</b>', 'palo'); reanimar(estadio, 'sacude'); await pelotaA(eqT === 0 ? 85 : 15, rnd(30, 70), 380); }
+      else aviso(l.corner ? 'Córner' : 'Afuera');
+      await dormir(700);
+    }
+  }
+
+  async function jugadaMomento(l) {
+    const eqT = l.equipo, tir = buscar(eqT, l.jugador), asis = l.asistente ? buscar(eqT, l.asistente) : null;
+    aviso('🎯 ¡Momento clave!', 'clave');
+    formar(eqT, 1.35, 700);
+    if (tir) ubicar(tir, eqT === 0 ? rnd(76, 82) : rnd(18, 24), rnd(36, 64), 700);
+    await pasar(asis || elegir(eqT, ['MED']), 460);
+    await pasar(tir, 520);
+    escribir(l);
+    enJugada = true;
+    if (!saltando) estadio.classList.add('lento');
+  }
+
+  async function prepararPenal(l) {
+    const eqT = l.equipo, tir = buscar(eqT, l.jugador), arq = arquero(1 - eqT);
+    for (const eq of [0, 1]) for (const f of activas(eq)) {
+      if (f === tir || f === arq) continue;
+      ubicar(f, eqT === 0 ? rnd(64, 74) : rnd(26, 36), rnd(18, 82), 600);
+    }
+    if (tir) ubicar(tir, eqT === 0 ? 84.5 : 15.5, 50, 600);
+    if (arq) ubicar(arq, eqT === 0 ? 97 : 3, 50, 600);
+    portador(tir);
+    await pelotaA(eqT === 0 ? 88.6 : 11.4, 50, 500);
+    enJugada = true;
+  }
+
+  async function jugadaPerdida(l) {
+    const quita = l.como === 'gambeta' ? buscar(1 - l.equipo, l.otro) : elegir(1 - l.equipo, ['DEF']);
+    if (l.como === 'pase') {
+      const rec = buscar(l.equipo, l.otro);
+      if (rec) await pelotaA((bx + rec.x) / 2, (by + rec.y) / 2, 300);
+    }
+    if (quita) { ubicar(quita, bx, by, 260); await dormir(260); await pasar(quita, 300); }
+    escribir(l);
+    aviso('❌ La perdiste');
+    enJugada = false;
+    estadio.classList.remove('lento');
+    await dormir(700);
+  }
+
+  async function efecto(l) {
+    plantel(l);
+    if (TIROS.includes(l.tipo)) return jugadaTiro(l);
+    if (l.tipo === 'momento') return jugadaMomento(l);
+    if (l.tipo === 'perdida') return jugadaPerdida(l);
+    escribir(l);
+    if (saltando) return;
+    if (l.tipo === 'penal') { anunciar('<b>¡PENAL!</b>', 'penal', 1500); return prepararPenal(l); }
+    if (l.tipo === 'amarilla') anunciar(`<i class="tarjeta-ico amarilla"></i><span>${esc(l.jugador)}</span>`, 'tarjeta-a', 1400);
+    else if (l.tipo === 'roja') { anunciar(`<i class="tarjeta-ico roja"></i><b>¡Roja!</b><span>${esc(l.jugador)}</span>`, 'tarjeta-r', 1900); reanimar(estadio, 'sacude'); }
+    else if (l.tipo === 'cambio') aviso(`🔄 ${l.jugador} por ${l.sale}`);
+    else if (l.tipo === 'lesion') aviso('🚑 Lesión');
+    else if (l.tipo === 'tactica') aviso(`🧠 ${nombres[l.equipo]}: ${(D.tacticas[l.tactica] || {}).nombre || ''}`, 'tactica');
+    else if (l.tipo === 'falta') { const f = buscar(l.equipo, l.jugador); if (f) ubicar(f, bx, by + 2, 300); aviso('Falta'); }
+    else if (l.tipo === 'descanso') { $('periodo').textContent = 'ET'; anunciar('<b>Descanso</b>', 'info', 1500); formar(-1, 1, 900); await pelotaA(50, 50, 400); }
+    await dormir(l.tipo === 'relleno' ? 250 : l.tipo === 'falta' ? 450 : 650);
+  }
+
+  // un minuto de partido: rápido si no pasa nada, en cámara lenta si se viene una jugada
+  async function animarMinuto(eq, ls) {
+    if (saltando) { for (const l of ls) { plantel(l); escribir(l); } return; }
+    const peligro = ls.some(l => TIROS.includes(l.tipo) || ['momento', 'penal', 'perdida'].includes(l.tipo));
+    if (!ls.length) {
+      formar(eq, 1, 420);
+      await pasar(elegir(eq, ['DEF', 'MED']), 340);
+      await dormir(120);
+      await pasar(elegir(eq, ['MED', 'DEL']), 340);
+      await dormir(120);
+      return;
+    }
+    if (!peligro) {
+      formar(eq, 1, 550);
+      await pasar(elegir(eq, ['DEF', 'MED']), 320);
+      for (const l of ls) await efecto(l);
+      await pasar(elegir(eq, ['MED', 'DEL']), 320);
+      return;
+    }
+    for (const l of ls) await efecto(l);
+  }
+
+  // ---------- indicadores: reloj, posesión, probabilidad, dominio
+  function reloj(t, m) {
+    const lim = t === 1 ? 45 : 90;
+    $('reloj').textContent = m > lim ? `${lim}+${m - lim}'` : `${m}'`;
+    $('periodo').textContent = t === 1 ? '1T' : '2T';
+  }
+  function probabilidad(pg, pe) {
+    if (pg == null) return;
+    const pv = Math.max(0, 100 - pg - pe);
+    $('prob').hidden = false;
+    $('pb0').style.width = pg + '%'; $('pbe').style.width = pe + '%'; $('pb1').style.width = pv + '%';
+    $('pt0').textContent = `${nombres[0]} ${pg}%`; $('pte').textContent = `Empate ${pe}%`; $('pt1').textContent = `${pv}% ${nombres[1]}`;
+  }
+  $('pb0').style.background = COLORES[0]; $('pb1').style.background = COLORES[1];
+  const svg = $('momentum');
+  let segundoTiempo = false;
+  function dominio(t, eq, ls) {
+    const x = Math.min(99.2, (iMin - 1) * 0.98);
+    if (t === 2 && !segundoTiempo) {
+      segundoTiempo = true;
+      svg.insertAdjacentHTML('beforeend', `<line x1="${x}" y1="0" x2="${x}" y2="40" class="mo-et"/>`);
+    }
+    const mios = ls.filter(l => (l.tipo === 'atajada' ? 1 - l.equipo : l.equipo) === eq);
+    const peligro = mios.some(l => TIROS.includes(l.tipo) || l.tipo === 'momento');
+    const gol = mios.some(l => l.tipo === 'gol');
+    const h = 19 * Math.min(1, 0.22 + (peligro ? 0.5 : 0) + (gol ? 0.28 : 0)), y = eq === 0 ? 20 - h : 20;
+    svg.insertAdjacentHTML('beforeend', `<rect x="${x}" y="${y}" width="0.8" height="${h}" fill="${COLORES[eq]}" class="mo-b${gol ? ' gol' : ''}"/>`);
+  }
+
+  // ---------- reproducción
+  async function reproducir() {
+    const gen = ++generacion;
+    while (gen === generacion) {
+      if (pedidos.length && iMin > 0 && !saltando && clave(...ahora) > bloqueo) {
+        await atenderPedido();
+        if (gen !== generacion) return;
+        continue;
+      }
+      if (iMin >= posesion.length) break;
+      const [t, m, eq, pg, pe] = posesion[iMin];
+      const k = clave(t, m);
+      const ls = [];
+      while (iLinea < lineas.length && clave(lineas[iLinea].tiempo, lineas[iLinea].min) <= k
+             && !['final', 'resumen'].includes(lineas[iLinea].tipo)) ls.push(lineas[iLinea++]);
+      iMin++;
+      ahora = [t, m];
+      const rapido = !saltando && k <= reanudar;
+      if (rapido) saltando = true;
+      cuenta[eq]++;
+      reloj(t, m);
+      const pct = Math.round(100 * cuenta[0] / (cuenta[0] + cuenta[1]));
+      $('pos0').textContent = pct + '%'; $('pos1').textContent = (100 - pct) + '%';
+      probabilidad(pg, pe);
+      dominio(t, eq, ls);
+      await animarMinuto(eq, ls);
+      if (rapido) saltando = false;
+      if (saltando) { $('g0').textContent = goles[0]; $('g1').textContent = goles[1]; }
+      pintarControles();
+    }
+    if (gen !== generacion) return;
+    // líneas que quedan (descanso, final): se escriben antes de la pausa o el final
+    while (iLinea < lineas.length && !(['final', 'resumen'].includes(lineas[iLinea].tipo) && !final)) {
+      const l = lineas[iLinea++];
+      if (saltando) { plantel(l); escribir(l); } else await efecto(l);
+    }
+    terminarTramo();
+  }
+
+  function terminarTramo() {
+    $('g0').textContent = goles[0]; $('g1').textContent = goles[1];
+    if (saltando) estadio.classList.remove('lento');
+    saltando = false;
+    if (pausa) { mostrarPausa(pausa); return; }
+    if (VIVO && !final) return;
+    finPartido();
+  }
+
+  // ---------- táctica en vivo y pausas para cambios
+  const absoluto = (t, m) => t === 1 ? Math.min(m, 45) : Math.max(m, 46);
+  function esperaTactica() {
+    if (!vivo.ultima_tactica) return 0;
+    return Math.max(0, absoluto(...vivo.ultima_tactica) + D.espera_tactica - absoluto(...ahora));
+  }
+  function pintarControles() {
+    if (!VIVO || !$('tacticas')) return;
+    const abierto = !$('modal').hidden;
+    const bloqueado = abierto || terminado || iMin === 0 || (final && iMin >= posesion.length);
+    $('tacticas').hidden = false;
+    const espera = esperaTactica();
+    const pendiente = pedidos.find(p => p.tipo === 'tactica');
+    $('t-chips').innerHTML = Object.entries(D.tacticas).map(([k, t]) =>
+      `<button class="t-chip${vivo.tactica === k ? ' activo' : ''}${pendiente && pendiente.valor === k ? ' pendiente' : ''}" data-t="${k}"
+        title="${esc(t.ayuda)}" ${bloqueado || espera || vivo.tactica === k ? 'disabled' : ''}><span>${t.ico}</span>${esc(t.nombre)}</button>`).join('');
+    $('t-espera').textContent = espera ? `· podrás cambiarla en ${espera}'` : '';
+    const rival = D.tacticas[vivo.tactica_rival];
+    $('t-rival').textContent = rival && vivo.tactica_rival !== 'normal' ? `Rival: ${rival.ico} ${rival.nombre}` : '';
+    const b = $('btn-pausa');
+    b.hidden = false;
+    const sinCambios = vivo.cambios_restantes <= 0, pidiendo = pedidos.some(p => p.tipo === 'pausa');
+    b.disabled = bloqueado || vivo.pausas_restantes <= 0 || sinCambios || pidiendo;
+    b.textContent = pidiendo ? '⏸ Pausando…' : sinCambios ? '⏸ Sin cambios' : `⏸ Cambios (${vivo.pausas_restantes})`;
+  }
+  if (VIVO && $('t-chips')) {
+    $('t-chips').onclick = e => {
+      const b = e.target.closest('[data-t]'); if (!b || b.disabled) return;
+      pedidos = pedidos.filter(p => p.tipo !== 'tactica');
+      pedidos.push({tipo: 'tactica', valor: b.dataset.t});
+      pintarControles();
+    };
+    $('btn-pausa').onclick = () => { if (!pedidos.some(p => p.tipo === 'pausa')) pedidos.push({tipo: 'pausa'}); pintarControles(); };
+  }
+  async function atenderPedido() {
+    const ped = pedidos.shift();
+    const [t, m] = ahora;
+    try {
+      const r = await api('/api/partido/intervenir', {tiempo: t, minuto: m, tipo: ped.tipo, valor: ped.valor});
+      lineas = lineas.slice(0, iLinea);  // lo que venía después cambia
+      agregar(r);
+      bloqueo = clave(t, m);
+      if (ped.tipo === 'tactica') aviso(`🧠 ${D.tacticas[ped.valor].nombre}`, 'tactica');
+    } catch (e) { FGM.toast(e.message, {error: true}); }
+    pintarControles();
+  }
+
+  // ---------- pausas (modales)
+  const modal = $('modal'), caja = $('modal-caja');
+  let cronometro = null;
+  function temporizador(segundos, alTerminar) {
+    const fin = Date.now() + segundos * 1000;
+    const circ = 2 * Math.PI * 26;
+    caja.insertAdjacentHTML('afterbegin', `<div class="crono"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" class="c-fondo"/><circle cx="30" cy="30" r="26" class="c-arco" id="c-arco" stroke-dasharray="${circ}"/></svg><b id="c-num">${segundos}</b></div>`);
+    clearInterval(cronometro);
+    cronometro = setInterval(() => {
+      const resta = Math.max(0, fin - Date.now());
+      $('c-num').textContent = Math.ceil(resta / 1000);
+      $('c-arco').style.strokeDashoffset = circ * (1 - resta / (segundos * 1000));
+      if (resta < Math.min(10000, segundos * 400)) caja.classList.add('urgente');
+      if (resta <= 0) { clearInterval(cronometro); alTerminar(); }
+    }, 150);
+  }
+  function cerrarModal() { clearInterval(cronometro); modal.hidden = true; caja.className = 'modal-caja'; caja.onclick = null; }
+
+  function mostrarPausa(p) {
+    modal.hidden = false;
+    reanimar(caja, 'aparece');
+    if (p.tipo === 'roja') pausaRoja(p);
+    else if (p.tipo === 'ocasion') pausaOcasion(p);
+    else if (p.tipo === 'penal') pausaPenal(p);
+    else pausaCambios(p);
+    pintarControles();
+  }
+
+  // --- momento clave: tú eliges la jugada
+  const ICONO = {tirar: '🥅', pasar: '🤝', gambetear: '🪄'};
+  function pausaOcasion(p) {
+    caja.classList.add('momento');
+    caja.innerHTML = `
+      <h2>🎯 ¡Momento clave! <small class="tenue">${p.minuto}'</small></h2>
+      <div class="mo-cab">${p.tirador ? carta(p.tirador) : ''}
+        <p><b>${esc(p.jugador)}</b> queda de frente al arco${p.arquero ? ` de <b>${esc(p.arquero)}</b>` : ''}. ¿Qué hace?</p></div>
+      <div class="m-opciones">${p.opciones.map((o, i) => `
+        <button class="m-op" data-c="${o.clave}" style="animation-delay:${i * 90}ms">
+          <span class="m-ico">${ICONO[o.clave] || '⚽'}</span>
+          <b>${esc(o.titulo)}</b><small>${esc(o.detalle)}</small>
+          <div class="m-prob"><i style="width:${Math.min(100, o.prob * 2)}%"></i></div>
+          <em>${o.prob}% de gol${o.exito != null ? ` · ${o.exito}% de que salga` : ''}</em>
+        </button>`).join('')}</div>
+      <p class="tenue m-pie">Si se acaba el tiempo, remata.</p>`;
+    caja.querySelectorAll('.m-op').forEach(b => b.onclick = () => decidir({eleccion: b.dataset.c}));
+    temporizador(p.segundos || 8, () => decidir({eleccion: 'tirar'}));
+  }
+
+  // --- penal: eliges el lado (pateando o atajando)
+  function pausaPenal(p) {
+    caja.classList.add('momento', 'penal-caja');
+    const titulo = p.patea ? `¡Penal a favor! Patea ${esc(p.pateador)}` : `¡Penal en contra! Ataja ${esc(p.arquero)}`;
+    const sub = p.patea ? 'Elige dónde patear. El arquero va a intentar adivinar.' : `Patea ${esc(p.pateador)}. Elige hacia dónde se lanza tu arquero.`;
+    caja.innerHTML = `
+      <h2>🥅 ${titulo}</h2><p class="tenue">${sub} <small>(visto desde quien patea)</small></p>
+      <div class="arco-penal">
+        <button data-l="izq"><span>↖</span>Izquierda</button>
+        <button data-l="centro"><span>⬆</span>Al medio</button>
+        <button data-l="der"><span>↗</span>Derecha</button>
+      </div>
+      <p class="tenue m-pie">${p.patea ? 'Al medio nunca se va afuera, pero si el arquero se queda, lo ataja.' : 'Los pateadores van más a los costados que al medio.'}</p>`;
+    caja.querySelectorAll('[data-l]').forEach(b => b.onclick = () => decidir({lado: b.dataset.l}));
+    temporizador(p.segundos || 7, () => decidir({}));
+  }
+
+  // --- cancha de la pausa: tus jugadores en su lugar, con su estado
+  function marcas(j) {
+    const m = [];
+    if (j.goles) m.push(`<i class="pm gol">${'⚽'.repeat(Math.min(j.goles, 3))}</i>`);
+    if (j.amarillas) m.push(`<i class="pm tarjeta-ico amarilla" title="Amonestado en este partido: otra amarilla y se va expulsado"></i>`);
+    if (j.riesgo) m.push(`<i class="pm riesgo" title="${j.acumuladas} amarillas en la temporada: con una más queda suspendido">⚠${j.acumuladas}</i>`);
+    return m.length ? `<span class="p-marcas">${m.join('')}</span>` : '';
+  }
+  function barraEnergia(e) {
+    return `<i class="energia"><em style="width:${e}%" class="${e < 45 ? 'muy-baja' : e < 65 ? 'baja' : ''}"></em></i>`;
+  }
+  function canchaPausa(est, cambios, selSale, vacio) {
+    const coords = D.coordenadas[est.formacion], puestos = D.formaciones[est.formacion];
+    const porSlot = {};
+    est.cancha.forEach(j => porSlot[j.slot] = j);
+    let html = '';
+    for (let i = 0; i < coords.length; i++) {
+      const [x, y] = coords[i];
+      const j = porSlot[i];
+      if (!j) {
+        const f = est.fuera.filter(x => x.slot === i).pop();
+        const entra = vacio && vacio.slot === i ? vacio.entra : null;
+        html += `<div class="slot p-slot ${entra ? 'cubre' : 'hueco'}" style="left:${x}%;top:${y}%">
+          ${entra ? carta(entra, {puesto: puestos[i], extra: '<i class="p-flecha">▲</i>'}) : `<div class="mini vacio hueco-roja"><span>${f && f.motivo === 'roja' ? '🟥' : '—'}</span></div>`}
+          <small class="s-puesto">${entra ? FGM.pos(puestos[i]) : (f ? esc(f.nombre) : FGM.pos(puestos[i]))}</small></div>`;
+        continue;
+      }
+      const c = cambios.find(x => x.sale === j.id);
+      const entra = c ? est.banca.find(b => b.id === c.entra) : null;
+      const mostrar = entra || j;
+      const af = Math.round(100 * FGM.afinidad(mostrar.pos, j.puesto));
+      const seVa = vacio && vacio.sale === j.id && vacio.entra;
+      html += `<div class="slot p-slot${selSale === j.id ? ' sel' : ''}${entra ? ' cambiado' : ''}${seVa ? ' se-va' : ''}${j.energia < 45 && !entra ? ' agotado' : ''}"
+                   data-sale="${j.id}" style="left:${x}%;top:${y}%">
+        ${carta(mostrar, {puesto: j.puesto, extra: entra ? '<i class="p-flecha">▲</i>' : barraEnergia(j.energia) + marcas(j)})}
+        <small class="s-puesto">${seVa ? '▼ sale' : FGM.pos(j.puesto)}${af < 100 && !seVa ? ` <em class="${af < 85 ? 'mal' : 'medio'}">${af}%</em>` : ''}</small></div>`;
+    }
+    return `<div class="cancha p-cancha">
+      <div class="lineas"><div class="medio"></div><div class="circulo"></div><div class="area arriba"></div><div class="area abajo"></div><div class="chica arriba"></div><div class="chica abajo"></div></div>
+      ${html}</div>`;
+  }
+  function leyendaPausa(est) {
+    return `<p class="p-leyenda tenue"><span><i class="energia demo"><em style="width:70%"></em></i> energía</span>
+      <span><i class="tarjeta-ico amarilla"></i> amonestado</span>
+      ${D.tipo !== 'amistoso' ? `<span><i class="pm riesgo">⚠${est.limite_amarillas - 1}</i> 1 amarilla más = suspendido</span>` : ''}
+      <span><em class="mal">80%</em> fuera de posición</span></p>`;
+  }
+
+  function pausaRoja(p) {
+    const ops = p.opciones || [], est = p.estado;
+    let elegida = ops.length ? 0 : -1;
+    caja.classList.add('pausa-cancha');
+    caja.innerHTML = `
+      <div class="roja-cab"><i class="tarjeta-ico roja gira"></i><div><h2>¡Expulsado ${esc(p.jugador)}!</h2>
+      <p class="tenue">Te quedas con 10. Elige quién entra a cubrir el puesto y quién sale para dejarle lugar.</p></div></div>
+      <div class="p-grid">
+        <div class="p-izq"></div>
+        <div class="p-der">
+          <div class="opciones">${ops.map((o, i) => `
+            <button class="opcion" data-i="${i}" style="animation-delay:${i * 120}ms">
+              ${carta({nombre: o.entra_nombre, pos: o.entra_pos, ovr: o.entra_ovr, nivel: o.entra_nivel, club: o.entra_club}, {puesto: o.puesto})}
+              <span><b>Entra ${esc(o.entra_nombre)}</b> de ${esc(FGM.pos(o.puesto))} (${o.afinidad}%)<br><small class="tenue">Sale ${esc(o.sale_nombre)} (${esc(FGM.pos(o.sale_puesto))})</small></span>
+            </button>`).join('')}
+            <button class="opcion sin" data-i="-1"><span><b>Seguir con 10</b><br><small class="tenue">Sin cambios</small></span></button>
+          </div>
+          <button class="primario p-ok">✔ Confirmar</button>
+        </div>
+      </div>`;
+    function pintar() {
+      const o = ops[elegida];
+      const entra = o ? est.banca.find(b => b.id === o.entra) : null;
+      caja.querySelector('.p-izq').innerHTML = canchaPausa(est, [], null, {slot: p.slot, sale: o ? o.sale : null, entra}) + leyendaPausa(est);
+      caja.querySelectorAll('.opcion').forEach(b => b.classList.toggle('activa', +b.dataset.i === elegida));
+    }
+    caja.querySelectorAll('.opcion').forEach(b => { b.onclick = () => { elegida = +b.dataset.i; pintar(); }; });
+    const confirmar = () => { const o = ops[elegida]; decidir(o ? {entra: o.entra, sale: o.sale} : {}); };
+    caja.querySelector('.p-ok').onclick = confirmar;
+    pintar();
+    temporizador(p.segundos || 60, confirmar);
+  }
+
+  // entretiempo (60 s) y pausa táctica (30 s): cambios, mentalidad y táctica
+  function pausaCambios(p) {
+    const est = p.estado, entretiempo = p.tipo === 'descanso';
+    let cambios = [], selSale = null, mentalidad = est.mentalidad, tactica = est.tactica || 'normal';
+    caja.classList.add('pausa-cancha');
+    caja.innerHTML = `
+      <h2>${entretiempo ? `⏸️ Entretiempo · ${goles[0]} - ${goles[1]}` : `⏸️ Pausa táctica · ${p.minuto}' · ${goles[0]} - ${goles[1]}`}</h2>
+      <p class="tenue">Toca un jugador en la cancha y después uno de la banca. Tócalo de nuevo para deshacer.</p>
+      <div class="p-grid">
+        <div class="p-izq"></div>
+        <div class="p-der">
+          <h3>Táctica</h3>
+          <div class="t-chips d-tact">${Object.entries(D.tacticas).map(([k, t]) => `<button class="t-chip" data-tc="${k}" title="${esc(t.ayuda)}"><span>${t.ico}</span>${esc(t.nombre)}</button>`).join('')}</div>
+          <p class="tenue d-ayuda"></p>
+          <h3>Mentalidad</h3>
+          <div class="d-ment">${D.mentalidades.map(m => `<button data-m="${m}">${m}</button>`).join('')}</div>
+          <h3>Banca <small class="tenue d-rest"></small></h3>
+          <div class="d-banca"></div>
+          <ul class="d-lista"></ul>
+          <button class="primario d-ok">${entretiempo ? '▶ Empezar el segundo tiempo' : '▶ Seguir jugando'}</button>
+        </div>
+      </div>`;
+    function pintar() {
+      const usados = new Set(cambios.map(c => c.entra));
+      const restantes = est.cambios - cambios.length;
+      const sel = est.cancha.find(j => j.id === selSale);
+      caja.querySelector('.p-izq').innerHTML = canchaPausa(est, cambios, selSale) + leyendaPausa(est);
+      caja.querySelector('.d-banca').innerHTML = est.banca.map(j => {
+        const af = sel ? Math.round(100 * FGM.afinidad(j.pos, sel.puesto)) : null;
+        const usado = usados.has(j.id);
+        return `<div class="d-jug${usado ? ' entra' : ''}${sel && !usado ? ' elegible' : ''}" data-entra="${j.id}">
+          ${carta(j, {extra: marcas(j)})}
+          <small>${af !== null && !usado ? `<em class="${af < 85 ? 'mal' : af < 100 ? 'medio' : 'ok'}">${af}% de ${FGM.pos(sel.puesto)}</em>` : FGM.pos(j.pos)}</small></div>`;
+      }).join('') || '<p class="tenue">Sin suplentes.</p>';
+      caja.querySelector('.d-lista').innerHTML = cambios.map((c, i) => {
+        const s = est.cancha.find(j => j.id === c.sale), e = est.banca.find(j => j.id === c.entra);
+        return `<li><span class="sube">▲ ${esc(e.nombre)}</span><span class="baja">▼ ${esc(s.nombre)}</span><button data-q="${i}" class="enlace">✕</button></li>`;
+      }).join('');
+      caja.querySelector('.d-rest').textContent = sel ? `· ¿quién entra por ${sel.nombre}?` : `· ${restantes} cambio${restantes === 1 ? '' : 's'} disponible${restantes === 1 ? '' : 's'}`;
+      caja.querySelectorAll('.d-ment button').forEach(b => b.classList.toggle('activo', b.dataset.m === mentalidad));
+      caja.querySelectorAll('[data-tc]').forEach(b => b.classList.toggle('activo', b.dataset.tc === tactica));
+      caja.querySelector('.d-ayuda').textContent = D.tacticas[tactica].ayuda;
+    }
+    caja.onclick = e => {
+      const s = e.target.closest('[data-sale]'), en = e.target.closest('[data-entra]'), q = e.target.closest('[data-q]'),
+            m = e.target.closest('[data-m]'), tc = e.target.closest('[data-tc]');
+      if (m) mentalidad = m.dataset.m;
+      else if (tc) tactica = tc.dataset.tc;
+      else if (q) cambios.splice(+q.dataset.q, 1);
+      else if (s) {
+        const id = +s.dataset.sale, ya = cambios.findIndex(c => c.sale === id);
+        if (ya >= 0) { cambios.splice(ya, 1); selSale = null; }
+        else if (cambios.length >= est.cambios) { FGM.toast('No te quedan cambios'); return; }
+        else selSale = selSale === id ? null : id;
+      } else if (en && selSale) {
+        const id = +en.dataset.entra;
+        if (!cambios.some(c => c.entra === id)) { cambios.push({sale: selSale, entra: id}); selSale = null; }
+      } else return;
+      pintar();
+    };
+    const listo = () => decidir({cambios, mentalidad, tactica});
+    caja.querySelector('.d-ok').onclick = listo;
+    pintar();
+    temporizador(p.segundos || 60, listo);
+  }
+
+  let decidiendo = false;
+  async function decidir(decision) {
+    if (decidiendo) return;
+    decidiendo = true;
+    cerrarModal();
+    pausa = null;
+    bloqueo = clave(...ahora);
+    try {
+      agregar(await api('/api/partido/avanzar', {decision, desde: eventos}));
+    } catch (e) { FGM.toast(e.message, {error: true}); decidiendo = false; return; }
+    decidiendo = false;
+    pintarControles();
+    reproducir();
+  }
+
+  // ---------- final
+  async function finPartido() {
+    if (terminado) return;
+    terminado = true;
+    pintarControles();
+    $('g0').textContent = goles[0]; $('g1').textContent = goles[1];
+    $('saltar').hidden = true;
+    const mio = goles[D.lado], suyo = goles[1 - D.lado];
+    const res = mio > suyo ? ['¡Victoria!', 'gana'] : mio === suyo ? ['Empate', 'empata'] : ['Derrota', 'pierde'];
+    anunciar(`<b>${res[0]}</b><span>${goles[0]} - ${goles[1]}</span>`, 'final ' + res[1], 3500);
+    if (mio > suyo && VIVO) confeti(120);
+    if (VIVO) {
+      try { await api('/api/partido/avanzar', {terminar: true}); }
+      catch (e) { FGM.toast(e.message, {error: true}); }
+    }
+    const html = await (await fetch(`/partido/${D.id}/resumen`)).text();
+    const post = $('post'); post.innerHTML = html; post.hidden = false;
+    reanimar(post, 'entra');
+  }
+
+  // ---------- controles
+  $('velocidad').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    velocidad = +b.dataset.v;
+    document.querySelectorAll('#velocidad button').forEach(x => x.classList.toggle('activo', x === b));
+  };
+  $('saltar').onclick = () => { saltando = true; };
+
+  // ---------- inicio
+  formar(-1, 1, 0);
+  (async () => {
+    if (D.modo === 'repeticion') {
+      lineas = D.lineas; posesion = D.posesion; final = true;
+      if (!posesion.length) saltando = true;   // partidos antiguos sin línea de posesión
+    } else {
+      let r;
+      try { r = await api('/api/partido/avanzar', {desde: 0}); }
+      catch (e) { FGM.toast(e.message, {error: true}); return; }
+      if (r.reanudar) reanudar = clave(...r.reanudar);   // recargaste la página: se pasa rápido lo ya visto
+      agregar(r);
+    }
+    reproducir();
+  })();
+})();
+</script>
+{% endblock %}

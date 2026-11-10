@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta">
+  <div class="encabezado">
+    <h2>Inventario</h2>
+    <span class="etiqueta" id="contador">0 cartas</span>
+  </div>
+  <p class="tenue">Las cartas repetidas sirven para <b>mejorar</b>: cada mejora gasta una copia y monedas, y suma +1 a la media y a todos los atributos (hasta 4 estrellas).</p>
+
+  <div class="inv-filtros">
+    <input id="buscar" type="search" placeholder="Buscar jugador o club…">
+    <select id="orden">
+      <option value="ovr">Mayor media</option>
+      <option value="nombre">Nombre</option>
+      <option value="copias">Más copias</option>
+      <option value="mejora">Más mejorada</option>
+    </select>
+  </div>
+  <div class="filtros" id="lineas">
+    <button data-f="" class="activo">Todas</button><button data-f="POR">POR</button><button data-f="DEF">DEF</button><button data-f="MED">MED</button><button data-f="DEL">DEL</button>
+  </div>
+  <div class="filtros" id="niveles">
+    <button data-n="" class="activo">Todo nivel</button><button data-n="oro">Oro</button><button data-n="plata">Plata</button><button data-n="bronce">Bronce</button>
+  </div>
+  <div class="filtros" id="extras">
+    <button data-x="mejorar">⬆ Se puede mejorar</button>
+    <button data-x="repetidas">♻ Repetidas</button>
+    <button data-x="once">📋 En el once</button>
+    <button data-x="fuera">🚑 No disponibles</button>
+  </div>
+  <div class="reservas inventario" id="grilla"></div>
+</section>
+
+<section class="tarjeta" id="coleccion">
+  <div class="encabezado">
+    <h2>Colección</h2>
+    <span class="etiqueta" id="contador-col">0</span>
+  </div>
+  <p class="tenue">Escudos y estadios de los clubes reales. Salen en los sobres. Toca uno que tengas para usarlo en tu club: el escudo pasa a ser tu logo y el estadio se ve en tus partidos de local.</p>
+  <div class="filtros" id="tipos-col">
+    <button data-t="" class="activo">Todo</button><button data-t="escudo">🛡️ Escudos</button><button data-t="estadio">🏟️ Estadios</button>
+    <button data-solo="1">Solo los que tengo</button>
+  </div>
+  <div class="grilla-col" id="grilla-col"></div>
+</section>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-caja ficha-inv" id="ficha"></div>
+</div>
+
+<script id="datos" type="application/json">{{ datos|safe }}</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('datos').textContent);
+  const {carta, esc, linea, api, toast, reanimar, confeti, ETQ} = FGM;
+  const $ = id => document.getElementById(id);
+  let fichas = D.fichas, filtroLinea = '', filtroNivel = '', extras = new Set();
+
+  function lista() {
+    const q = $('buscar').value.trim().toLowerCase();
+    let l = fichas.filter(f =>
+      (!filtroLinea || linea(f.pos) === filtroLinea) && (!filtroNivel || f.nivel === filtroNivel) &&
+      (!q || (f.completo + ' ' + f.club).toLowerCase().includes(q)) &&
+      (!extras.has('mejorar') || f.puede_mejorar) && (!extras.has('repetidas') || f.copias > 1) &&
+      (!extras.has('once') || f.en_once) && (!extras.has('fuera') || f.estado !== 'disponible'));
+    const orden = $('orden').value;
+    const cmp = {ovr: (a, b) => b.ovr - a.ovr, nombre: (a, b) => a.nombre.localeCompare(b.nombre),
+                 copias: (a, b) => b.copias - a.copias || b.ovr - a.ovr, mejora: (a, b) => b.mejora - a.mejora || b.ovr - a.ovr}[orden];
+    return l.sort(cmp);
+  }
+
+  function pintar() {
+    const l = lista();
+    $('contador').textContent = `${l.length} de ${fichas.length} cartas`;
+    $('grilla').innerHTML = l.map((f, i) => carta(f, {
+      atrib: `style="animation-delay:${Math.min(i, 30) * 20}ms"`,
+      extra: (f.copias > 1 ? `<i class="repetida">×${f.copias}</i>` : '') +
+             (f.puede_mejorar ? '<i class="se-mejora" title="Se puede mejorar">⬆</i>' : '') +
+             (f.en_once ? '<i class="en-once" title="En el once">●</i>' : ''),
+    })).join('') || '<p class="tenue">No hay cartas con esos filtros.</p>';
+  }
+
+  // ---------- filtros
+  $('buscar').oninput = pintar;
+  $('orden').onchange = pintar;
+  $('lineas').onclick = e => { const b = e.target.closest('button'); if (!b) return; filtroLinea = b.dataset.f; marcar('lineas', b); pintar(); };
+  $('niveles').onclick = e => { const b = e.target.closest('button'); if (!b) return; filtroNivel = b.dataset.n; marcar('niveles', b); pintar(); };
+  $('extras').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    extras.has(b.dataset.x) ? extras.delete(b.dataset.x) : extras.add(b.dataset.x);
+    b.classList.toggle('activo'); pintar();
+  };
+  function marcar(id, b) { document.querySelectorAll(`#${id} button`).forEach(x => x.classList.toggle('activo', x === b)); }
+
+  // ---------- ficha con mejora
+  const modal = $('modal'), ficha = $('ficha');
+  modal.onclick = e => { if (e.target === modal) modal.hidden = true; };
+  $('grilla').onclick = e => { const c = e.target.closest('.mini[data-pid]'); if (c) abrirFicha(+c.dataset.pid); };
+
+  function abrirFicha(pid) {
+    const f = fichas.find(x => x.pid === pid);
+    const estrellas = '★'.repeat(f.mejora - 1) + '☆'.repeat(D.maximo - f.mejora);
+    const barras = Object.entries(f.stats).map(([k, v]) =>
+      `<div class="barra-stat"><span>${ETQ[k] || k}</span><i><em style="width:${v}%"></em></i><b>${v}${f.mejora > 1 ? `<small class="plus">+${f.mejora - 1}</small>` : ''}</b></div>`).join('');
+    const monedas = +$('monedas').dataset.valor;
+    let boton;
+    if (f.mejora >= D.maximo) boton = '<p class="tenue">Nivel máximo alcanzado ✨</p>';
+    else if (f.copias < 2) boton = '<p class="tenue">Consigue otra copia de este jugador (sobres o carta gratis) para mejorarlo.</p>';
+    else boton = `<button class="primario grande-btn" id="btn-mejorar" ${monedas < f.costo_mejora ? 'disabled' : ''}>
+        ⬆ Mejorar a nivel ${f.mejora + 1} · 🪙 ${f.costo_mejora.toLocaleString('es-CL')}<br><small>gasta 1 copia repetida</small></button>`;
+    ficha.innerHTML = `
+      <button class="enlace cerrar" id="cerrar">✕</button>
+      <div class="fi-cab">
+        <div class="fi-carta" id="fi-carta">${carta(f, {grande: true})}</div>
+        <div class="fi-info">
+          <h2>${esc(f.completo)}</h2>
+          <p class="tenue">${FGM.pos(f.pos)} · ${esc(f.club)} · ${esc(f.nacion)}</p>
+          <p class="estrellas" title="Nivel de mejora">${estrellas}</p>
+          <p>Media <b id="fi-ovr">${f.ovr}</b>${f.mejora > 1 ? ` <span class="plus-grande">+${f.mejora - 1}</span>` : ''} <small class="tenue">(base ${f.ovr_base})</small> · Copias: <b>${f.copias}</b></p>
+          <p class="tenue">${f.pj} PJ · ${f.goles} G · ${f.asis} A${f.en_once ? ' · en el once' : f.en_banca ? ' · suplente' : ''}</p>
+        </div>
+      </div>
+      <div class="barras">${barras}</div>
+      <div class="fi-acciones">${boton}</div>`;
+    modal.hidden = false;
+    reanimar(ficha, 'aparece');
+    $('cerrar').onclick = () => modal.hidden = true;
+    const b = $('btn-mejorar');
+    if (b) b.onclick = () => mejorar(f);
+  }
+
+  async function mejorar(f) {
+    let r;
+    try { r = await api('/api/mejorar/' + f.pid); }
+    catch (e) { toast(e.message, {error: true}); return; }
+    FGM.monedas(r.monedas);
+    // se gastó una copia: la sacamos de la lista (la de menor nivel que no juega, igual que el servidor)
+    const gastable = fichas.filter(x => x.carta === f.carta && x.pid !== f.pid)
+      .sort((a, b) => (a.en_once - b.en_once) || (a.en_banca - b.en_banca) || (a.mejora - b.mejora))[0];
+    fichas = fichas.filter(x => x !== gastable);
+    const nueva = Object.assign({}, f, r.carta);
+    const copias = fichas.filter(x => x.carta === f.carta).length;
+    fichas = fichas.map(x => x.carta === f.carta ? Object.assign(x, x.pid === f.pid ? nueva : {}, {copias}) : x);
+    nueva.copias = copias;
+    nueva.puede_mejorar = nueva.mejora < D.maximo && copias > 1;
+    nueva.costo_mejora = 400 * nueva.mejora;
+    fichas = fichas.map(x => x.pid === f.pid ? nueva : x);
+    // animación: brillo, sube la media
+    const el = $('fi-carta');
+    el.classList.add('mejorando');
+    FGM.contar($('fi-ovr'), nueva.ovr, 900, f.ovr);
+    confeti(50);
+    toast(`¡${nueva.nombre} sube a nivel ${nueva.mejora}! +1 a todo`);
+    setTimeout(() => { abrirFicha(f.pid); pintar(); }, 1300);
+  }
+
+  pintar();
+
+  // ---------- colección de escudos y estadios
+  let tipoCol = '', soloTengo = false;
+  function pintarColeccion() {
+    const col = D.coleccion;
+    const tengo = col.filter(o => o.tengo);
+    const esc_ = tengo.filter(o => o.tipo === 'escudo').length, est = tengo.filter(o => o.tipo === 'estadio').length;
+    $('contador-col').textContent = `🛡️ ${esc_}/${col.filter(o => o.tipo === 'escudo').length} · 🏟️ ${est}/${col.filter(o => o.tipo === 'estadio').length}`;
+    const lista = col.filter(o => (!tipoCol || o.tipo === tipoCol) && (!soloTengo || o.tengo))
+      .sort((a, b) => (b.tengo - a.tengo) || ({oro: 0, plata: 1, bronce: 2}[a.nivel] - {oro: 0, plata: 1, bronce: 2}[b.nivel]));
+    $('grilla-col').innerHTML = lista.map(o => FGM.objeto(o)).join('') || '<p class="tenue">Nada por aquí todavía.</p>';
+  }
+  $('tipos-col').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.solo) { soloTengo = !soloTengo; b.classList.toggle('activo', soloTengo); }
+    else { tipoCol = b.dataset.t; document.querySelectorAll('#tipos-col button[data-t]').forEach(x => x.classList.toggle('activo', x === b)); }
+    pintarColeccion();
+  };
+  $('grilla-col').onclick = async e => {
+    const el = e.target.closest('.objeto'); if (!el) return;
+    const o = D.coleccion.find(x => x.id === +el.dataset.oid);
+    if (!o.tengo) { toast('Todavía no lo tienes: sale en los sobres', {}); return; }
+    if (o.en_uso) return;
+    if (!confirm(`¿Usar ${o.tipo === 'escudo' ? 'el escudo de ' + o.club : o.nombre} en tu club?`)) return;
+    try {
+      await api(`/api/objeto/${o.id}/usar`);
+      D.coleccion.forEach(x => { if (x.tipo === o.tipo) x.en_uso = x.id === o.id; });
+      reanimar(el, 'pop'); pintarColeccion();
+      toast(o.tipo === 'escudo' ? '¡Nuevo escudo para tu club!' : `¡Ahora juegas de local en ${o.nombre}!`);
+      if (o.tipo === 'escudo') setTimeout(() => location.reload(), 900);
+    } catch (err) { toast(err.message, {error: true}); }
+  };
+  pintarColeccion();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta">
+  <div class="encabezado">
+    <h2>Mercado de transferencias</h2>
+    <span class="etiqueta">Fecha {{ fecha }} · {{ en_venta }} en venta</span>
+  </div>
+  <div class="filtros pestanas" id="pestanas">
+    <button data-modo="jugador" class="activo">🔎 Buscar jugador</button>
+    <button data-modo="venta">🏷️ En venta</button>
+  </div>
+  <p class="tenue" id="ayuda"></p>
+
+  <form class="buscador" id="buscador" autocomplete="off">
+    <input type="search" name="q" placeholder="Nombre del jugador (p. ej. Vidal)">
+    <select name="club">
+      <option value="">Todos los equipos</option>
+      {% for c in clubes %}<option>{{ c }}</option>{% endfor %}
+    </select>
+    <select name="nacion">
+      <option value="">Todos los países</option>
+      {% for n in naciones %}<option>{{ n }}</option>{% endfor %}
+    </select>
+    <select name="pos">
+      <option value="">Todas las posiciones</option>
+      <optgroup label="Línea">
+        <option value="POR">Porteros</option><option value="DEF">Defensas</option>
+        <option value="MED">Mediocampistas</option><option value="DEL">Delanteros</option>
+      </optgroup>
+      <optgroup label="Puesto">
+        <option value="CB">DFC</option><option value="LB">LI</option><option value="RB">LD</option>
+        <option value="CDM">MCD</option><option value="CM">MC</option><option value="CAM">MCO</option>
+        <option value="LM">MI</option><option value="RM">MD</option>
+        <option value="LW">EI</option><option value="RW">ED</option><option value="ST">DC</option>
+      </optgroup>
+    </select>
+    <div class="solo-venta">
+      <input type="number" name="ovr_min" min="0" max="99" placeholder="OVR mín.">
+      <input type="number" name="precio_max" min="0" step="100" placeholder="Precio máx.">
+      <select name="orden">
+        <option value="ovr">Mejor OVR</option>
+        <option value="precio">Más baratos</option>
+        <option value="precio_desc">Más caros</option>
+        <option value="vence">Vencen antes</option>
+      </select>
+    </div>
+  </form>
+
+  <p class="tenue" id="info"></p>
+  <div class="ofertas" id="resultados"></div>
+</section>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-caja ficha-inv ficha-mercado" id="ficha"></div>
+</div>
+
+<script>
+(() => {
+  const {esc, api, toast, confeti, reanimar} = FGM;
+  const carta = (o, opts = {}) => FGM.carta(o, {...opts, sinBandera: true});  // en el mercado, sin bandera en la carta
+  const form = document.getElementById('buscador');
+  const caja = document.getElementById('resultados');
+  const info = document.getElementById('info');
+  const modal = document.getElementById('modal'), fichaCaja = document.getElementById('ficha');
+  const AYUDA = {
+    jugador: 'Busca cualquier jugador del juego y tócalo para ver toda su info. Después revisa si algún club lo vende.',
+    venta: 'Jugadores que los clubes ponen en venta. Toca uno para ver toda su info. Cada fecha vencen publicaciones y entran otras.',
+  };
+  const NOMBRE_POS = {GK: 'Portero', CB: 'Defensa central', LB: 'Lateral izquierdo', RB: 'Lateral derecho',
+    LWB: 'Carrilero izquierdo', RWB: 'Carrilero derecho', CDM: 'Mediocentro defensivo', CM: 'Mediocentro',
+    CAM: 'Mediapunta', LM: 'Volante izquierdo', RM: 'Volante derecho', LW: 'Extremo izquierdo', RW: 'Extremo derecho',
+    ST: 'Delantero centro', CF: 'Segundo delantero'};
+  const NOMBRE_STAT = {PAC: 'Velocidad', SHO: 'Tiro', PAS: 'Pase', DRI: 'Regate', DEF: 'Defensa', PHY: 'Físico'};
+  let modo = 'jugador', lista = [], mercado = {}, abierto = null;  // mercado: carta_id -> publicaciones consultadas
+
+  const monedas = () => +document.getElementById('monedas').dataset.valor;
+  const precio = n => '🪙 ' + n.toLocaleString('es-CL');
+  const buscarO = id => lista.find(x => x.carta_id === id);
+
+  // estado de un jugador en el mercado (en la lista y en la ficha)
+  function estado(o, grande = false) {
+    if (o.tuya) return '<span class="sello tuya">YA LO TIENES</span>';
+    if (o.vendida) return '<span class="sello">FICHADO</span>';
+    const pubs = o.en_mercado ? [o] : mercado[o.carta_id];
+    if (pubs === undefined) return `<button class="ver-mercado ${grande ? 'grande-btn' : ''}">🔎 Buscar en el mercado</button>`;
+    if (!pubs.length) return '<span class="sello fuera">NADIE LO VENDE</span><small class="tenue">Vuelve a mirar en la próxima fecha.</small>';
+    const p = pubs[0];
+    return `<small class="en-mercado">✅ En venta</small><small class="vende">🏷️ Lo vende: ${esc(p.vendedor)}</small>
+      <small class="tenue">${p.quedan <= 1 ? '⏳ Vence esta fecha' : `Vence en ${p.quedan} fechas`}</small>
+      <button class="primario comprar ${grande ? 'grande-btn' : ''}" ${monedas() < p.precio ? 'disabled' : ''}>Comprar · ${precio(p.precio)}</button>`;
+  }
+
+  function ficha(o, i) {
+    return `
+      <div class="oferta ${o.vendida ? 'vendida' : ''}" style="animation-delay:${Math.min(i, 20) * 30}ms" data-id="${o.carta_id}">
+        <div class="abrir" title="Ver toda la info">${carta(o)}</div>
+        <div class="of-info">
+          <strong class="abrir" title="Ver toda la info">${esc(o.completo)}</strong>
+          <small class="tenue">${esc(FGM.pos(o.pos))} · ${esc(o.club)} · ${esc(o.nacion)}</small>
+          <div class="of-stats">${Object.entries(o.stats).map(([k, v]) => `<span><small>${FGM.ETQ[k]}</small>${v}</span>`).join('')}</div>
+          ${estado(o)}
+        </div>
+      </div>`;
+  }
+
+  // ficha completa del jugador (ventana)
+  function abrirFicha(o) {
+    abierto = o.carta_id;
+    const valores = Object.values(o.stats);
+    const media = Math.round(valores.reduce((a, b) => a + b, 0) / valores.length);
+    const barras = Object.entries(o.stats).map(([k, v]) =>
+      `<div class="barra-stat"><span>${NOMBRE_STAT[k] || k}</span><i><em style="width:${v}%"></em></i><b>${v}</b></div>`).join('');
+    fichaCaja.dataset.id = o.carta_id;
+    fichaCaja.innerHTML = `
+      <button class="enlace cerrar" id="cerrar" title="Cerrar">✕</button>
+      <div class="fi-cab">
+        <div class="fi-carta">${carta(o, {grande: true})}</div>
+        <div class="fi-info">
+          <h2>${esc(o.completo)}</h2>
+          <p class="fm-club">${FGM.escudo(o.club, 'chico')} <b>${esc(o.club)}</b></p>
+          <p>${FGM.bandera(o.nacion, 'texto')} ${esc(o.nacion)}${o.edad ? ` · ${o.edad} años` : ''}</p>
+          <p class="tenue">${esc(NOMBRE_POS[o.pos] || o.pos)} (${esc(FGM.pos(o.pos))})${o.liga ? ` · ${esc(o.liga)}` : ''}</p>
+          <p>Media <b class="fm-ovr">${o.ovr}</b> · <span class="tenue">promedio de stats ${media}</span></p>
+          <p class="tenue">Valor de mercado: ${precio(o.valor || 0)}</p>
+        </div>
+      </div>
+      <h3>Estadísticas</h3>
+      <div class="barras">${barras}</div>
+      <h3>Mercado</h3>
+      <div class="fm-mercado">${estado(o, true)}</div>`;
+    modal.hidden = false;
+    reanimar(fichaCaja, 'aparece');
+    document.getElementById('cerrar').onclick = cerrar;
+  }
+  function cerrar() { modal.hidden = true; abierto = null; }
+  modal.addEventListener('click', e => { if (e.target === modal) cerrar(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) cerrar(); });
+
+  function pintar() {
+    caja.innerHTML = lista.map(ficha).join('');
+    if (abierto !== null && !modal.hidden) {  // refresca la parte de mercado de la ficha abierta
+      const o = buscarO(abierto), zona = fichaCaja.querySelector('.fm-mercado');
+      if (o && zona) zona.innerHTML = estado(o, true);
+    }
+  }
+
+  let espera, pedido = 0;
+  async function buscar() {
+    const datos = new URLSearchParams(new FormData(form));
+    datos.set('venta', modo === 'venta' ? 1 : 0);
+    for (const [k, v] of [...datos]) if (!v.trim()) datos.delete(k);
+    const n = ++pedido;
+    try {
+      const r = await fetch('/api/buscar?' + datos).then(r => r.json());
+      if (n !== pedido) return;  // llegó una búsqueda más nueva
+      if (r.error) throw new Error(r.error);
+      if (!Array.isArray(r.resultados)) throw new Error('El servidor no tiene el buscador: reinícialo (uvicorn web.app:app --reload).');
+      lista = r.resultados;
+      if (modo === 'jugador' && !datos.get('q') && !datos.get('club') && !datos.get('nacion') && !datos.get('pos'))
+        info.textContent = 'Escribe un nombre o elige un equipo, país o posición.';
+      else
+        info.textContent = lista.length ? `${lista.length}${lista.length >= 60 ? '+' : ''} jugadores · toca uno para ver toda su info` : 'No se encontraron jugadores.';
+      pintar();
+    } catch (err) { toast(err.message, {error: true}); }
+  }
+  form.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(buscar, 250); });
+  form.addEventListener('submit', e => { e.preventDefault(); buscar(); });
+
+  document.getElementById('pestanas').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    modo = b.dataset.modo;
+    document.querySelectorAll('#pestanas button').forEach(x => x.classList.toggle('activo', x === b));
+    document.querySelector('.solo-venta').hidden = modo !== 'venta';
+    document.getElementById('ayuda').textContent = AYUDA[modo];
+    lista = []; pintar(); buscar();
+  });
+
+  async function verMercado(id) {  // ¿alguien lo vende?
+    try {
+      const r = await fetch('/api/mercado/jugador/' + id).then(r => r.json());
+      if (r.error) throw new Error(r.error);
+      if (!Array.isArray(r.publicaciones)) throw new Error('El servidor no tiene el mercado nuevo: reinícialo.');
+      mercado[id] = r.publicaciones;
+      pintar();
+    } catch (err) { toast(err.message, {error: true}); }
+  }
+
+  async function comprar(id) {
+    const o = buscarO(id); if (!o) return;
+    const p = o.en_mercado ? o : mercado[id][0];
+    if (!confirm(`¿Comprar a ${o.completo} a ${p.vendedor} por ${p.precio.toLocaleString('es-CL')} monedas?`)) return;
+    try {
+      const r = await api('/api/comprar/' + id);
+      o.vendida = true; o.en_mercado = false; delete mercado[id];
+      FGM.monedas(r.monedas);
+      caja.querySelector(`.oferta[data-id="${id}"]`)?.classList.add('fichando');
+      if (o.nivel === 'oro') confeti(60);
+      toast(`¡${o.nombre} se une a tu club!`);
+      setTimeout(pintar, 700);
+    } catch (err) { toast(err.message, {error: true}); }
+  }
+
+  // clics en la lista y en la ficha abierta
+  document.addEventListener('click', e => {
+    const el = e.target.closest('.oferta[data-id], #ficha[data-id]'); if (!el) return;
+    const id = +el.dataset.id;
+    if (e.target.closest('.ver-mercado')) return verMercado(id);
+    if (e.target.closest('.comprar')) return comprar(id);
+    if (e.target.closest('.abrir')) { const o = buscarO(id); if (o) abrirFicha(o); }
+  });
+
+  document.querySelector('.solo-venta').hidden = true;
+  document.getElementById('ayuda').textContent = AYUDA[modo];
+  buscar();
+})();
+</script>
+{% endblock %}

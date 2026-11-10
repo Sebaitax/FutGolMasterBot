@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% block contenido %}
+<div class="dos-col">
+<section class="tarjeta">
+  <div class="tabs-alin" id="tabs-alin" title="Hasta 5 alineaciones guardadas; la marcada es la que juega"></div>
+  <div class="encabezado">
+    <h2>Alineación</h2>
+    <span class="etiqueta" id="fuerza" title="Media del once según el puesto de cada uno">Media –</span>
+  </div>
+  <div class="controles">
+    <label>Formación <select id="formacion"></select></label>
+    <label>Mentalidad
+      <select id="mentalidad">
+        {% for m in mentalidades %}<option value="{{ m }}">{{ m|capitalize }}</option>{% endfor %}
+      </select>
+    </label>
+    <button id="auto" type="button">✨ Automático</button>
+  </div>
+
+  <div class="quimica-medidor" title="Química: mismo club (verde) y misma nación (amarillo) entre compañeros cercanos. Rinde hasta +3%.">
+    <span>Química</span>
+    <div class="qm-barra"><i id="qm-barra"></i></div>
+    <b id="qm-num">0</b>
+  </div>
+  <p class="tenue ayuda">Toca una carta y luego otra para intercambiarlas, o arrástrala. Los cambios se guardan solos.
+    <span class="leyenda"><i class="v2"></i>mismo club <i class="v1"></i>misma nación <i class="v0"></i>sin vínculo</span></p>
+
+  <div class="cancha" id="cancha">
+    <div class="lineas">
+      <div class="medio"></div><div class="circulo"></div>
+      <div class="area arriba"></div><div class="area abajo"></div>
+      <div class="chica arriba"></div><div class="chica abajo"></div>
+    </div>
+    <svg class="enlaces" id="enlaces" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+  </div>
+  <div class="banca-titulo"><h3>Suplentes</h3><small class="tenue">entran en los cambios · arrastra o toca para elegir</small></div>
+  <div class="banca-slots" id="banca"></div>
+  <div id="detalle" class="detalle" hidden></div>
+</section>
+
+<section class="tarjeta">
+  <div class="encabezado">
+    <h2>Reservas</h2>
+    <div class="fila" style="margin:0">
+      <button id="vender-repetidas" class="chico-btn" hidden>♻ Vender repetidas</button>
+      <button id="modo-vender" class="chico-btn">🪙 Vender varias</button>
+    </div>
+  </div>
+  <div class="filtros" id="filtros">
+    <button data-f="" class="activo">Todos</button><button data-f="POR">POR</button><button data-f="DEF">DEF</button><button data-f="MED">MED</button><button data-f="DEL">DEL</button>
+  </div>
+  <div class="reservas" id="reservas"></div>
+</section>
+</div>
+
+<div class="barra-venta" id="barra-venta" hidden>
+  <span id="bv-texto">0 cartas</span>
+  <button class="enlace" id="bv-cancelar">Cancelar</button>
+  <button class="primario" id="bv-ok">Vender</button>
+</div>
+
+<script id="datos" type="application/json">{{ datos|safe }}</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('datos').textContent);
+  const {esc, carta, afinidad, linea, reanimar, api, toast, ETQ} = FGM;
+  const $ = id => document.getElementById(id);
+  let porPid = Object.fromEntries(D.fichas.map(f => [f.pid, f]));
+  let once = D.once.slice(), formacion = D.formacion, filtro = '', seleccion = null;
+  let vendiendo = false, aVender = new Set();
+  const cancha = $('cancha'), banca = $('banca'), reservas = $('reservas'), svg = $('enlaces');
+  const TITULARES = 11, TOTAL = 18;  // 0-10 en cancha, 11-17 suplentes
+  while (once.length < TOTAL) once.push(null);
+
+  // ---------- cartas repetidas: se queda la copia que está jugando (o la primera)
+  function repetidas() {
+    const porCarta = {};
+    D.fichas.forEach(f => (porCarta[f.carta] = porCarta[f.carta] || []).push(f.pid));
+    const sobran = new Set(), cuenta = {};
+    for (const pids of Object.values(porCarta)) {
+      pids.forEach(pid => cuenta[pid] = pids.length);
+      if (pids.length > 1) {
+        const queda = pids.find(pid => once.includes(pid)) || pids[0];
+        pids.filter(pid => pid !== queda).forEach(pid => sobran.add(pid));
+      }
+    }
+    return {sobran, cuenta};
+  }
+  const marcaRepetida = pid => { const n = repetidas().cuenta[pid]; return n > 1 ? `<i class="repetida" title="Tienes ${n} copias">×${n}</i>` : ''; };
+
+  const selF = $('formacion');
+  Object.keys(D.formaciones).forEach(f => selF.add(new Option(f, f, false, f === formacion)));
+  $('mentalidad').value = D.mentalidad;
+
+  // ---------- química (misma regla que juego/formaciones.py)
+  function valorEnlace(a, b) {
+    if (!a || !b) return 0;
+    if (a.club && a.club === b.club) return 2;
+    if (a.nacion && a.nacion === b.nacion) return 1;
+    return 0;
+  }
+  function quimica() {
+    const puestos = D.formaciones[formacion];
+    const suma = Array(11).fill(0), cuenta = Array(11).fill(0), enlaces = [];
+    for (const [i, j] of D.enlaces[formacion]) {
+      const v = valorEnlace(porPid[once[i]], porPid[once[j]]);
+      enlaces.push([i, j, v]);
+      for (const k of [i, j]) { suma[k] += v / 2; cuenta[k]++; }
+    }
+    const jug = suma.map((s, k) => {
+      const f = porPid[once[k]];
+      let q = f && cuenta[k] ? s / cuenta[k] : 0;
+      if (f && afinidad(f.pos, puestos[k]) < 0.9) q /= 2;
+      return q;
+    });
+    return {enlaces, jugadores: jug, equipo: Math.round(100 * jug.reduce((a, b) => a + b, 0) / 11)};
+  }
+
+  // ---------- cancha
+  const slots = [];
+  for (let i = 0; i < TOTAL; i++) {
+    const s = document.createElement('div');
+    s.className = 'slot'; s.dataset.i = i; s.style.animationDelay = (i * 45) + 'ms';
+    (i < TITULARES ? cancha : banca).appendChild(s); slots.push(s);
+  }
+
+  let quimAnterior = null;
+  function pintarCancha(animar = []) {
+    const puestos = D.formaciones[formacion], coords = D.coordenadas[formacion];
+    const q = quimica();
+    slots.forEach((s, i) => {
+      const f = porPid[once[i]];
+      if (i >= TITULARES) {  // suplentes: sin puesto fijo
+        s.innerHTML = (f ? carta(f, {atrib: 'draggable="true"', extra: marcaRepetida(f.pid)})
+                         : `<div class="mini vacio"><span>+</span></div>`) + `<small class="s-puesto">S${i - TITULARES + 1}</small>`;
+        s.classList.toggle('sel', !!(seleccion && seleccion.tipo === 'slot' && seleccion.i === i));
+        if (animar.includes(i)) reanimar(s, 'pop');
+        return;
+      }
+      s.style.left = coords[i][0] + '%'; s.style.top = coords[i][1] + '%';
+      s.innerHTML = (f ? carta(f, {puesto: puestos[i], quimica: q.jugadores[i], atrib: 'draggable="true"', extra: marcaRepetida(f.pid)})
+                       : `<div class="mini vacio"><span>+</span></div>`) + `<small class="s-puesto">${FGM.pos(puestos[i])}</small>`;
+      s.classList.toggle('sel', !!(seleccion && seleccion.tipo === 'slot' && seleccion.i === i));
+      if (animar.includes(i)) reanimar(s, 'pop');
+    });
+    // enlaces: se dibujan con animación
+    svg.innerHTML = q.enlaces.map(([i, j, v]) =>
+      `<line x1="${coords[i][0]}" y1="${coords[i][1]}" x2="${coords[j][0]}" y2="${coords[j][1]}" class="v${v}" pathLength="1"/>`).join('');
+    // medidor
+    $('qm-num').textContent = q.equipo;
+    $('qm-barra').style.width = q.equipo + '%';
+    $('qm-barra').className = q.equipo >= 66 ? 'alta' : q.equipo >= 33 ? 'media' : 'baja';
+    if (quimAnterior !== null && quimAnterior !== q.equipo) reanimar($('qm-num'), 'pulso');
+    quimAnterior = q.equipo;
+  }
+
+  function pintarReservas() {
+    const enCancha = new Set(once.filter(Boolean));
+    const lista = D.fichas.filter(f => !enCancha.has(f.pid) && (!filtro || linea(f.pos) === filtro));
+    reservas.innerHTML = lista.map(f => carta(f, {
+      atrib: 'draggable="true"',
+      extra: marcaRepetida(f.pid) + (vendiendo ? `<i class="check ${aVender.has(f.pid) ? 'si' : ''}">${aVender.has(f.pid) ? '✓' : ''}</i>` : ''),
+    })).join('') || '<p class="tenue">Todos tus jugadores están en el once o en la banca.</p>';
+    $('vender-repetidas').hidden = !repetidas().sobran.size || vendiendo;
+    reservas.classList.toggle('vendiendo', vendiendo);
+    if (seleccion && seleccion.tipo === 'reserva') {
+      const el = reservas.querySelector(`[data-pid="${seleccion.pid}"]`);
+      if (el) el.classList.add('sel'); else seleccion = null;
+    }
+  }
+
+  function pintar(animar) { pintarCancha(animar); pintarReservas(); pintarDetalle(); }
+
+  // ---------- detalle
+  const detalle = $('detalle');
+  function pintarDetalle() {
+    const pid = seleccion && (seleccion.tipo === 'slot' ? once[seleccion.i] : seleccion.pid);
+    const f = pid && porPid[pid];
+    if (!f || vendiendo) { detalle.hidden = true; return; }
+    const barras = Object.entries(f.stats).map(([k, v]) =>
+      `<div class="barra-stat"><span>${ETQ[k] || k}</span><i><em style="width:${v}%"></em></i><b>${v}${f.mejora > 1 ? `<small class="plus">+${f.mejora - 1}</small>` : ''}</b></div>`).join('');
+    const estado = f.lesion ? `🚑 Lesionado ${f.lesion} fecha(s)` : f.suspension ? `🟥 Suspendido ${f.suspension} fecha(s)` : '';
+    detalle.innerHTML = `
+      <div class="d-cab"><span class="ovr-g ${f.nivel}">${f.ovr}</span>
+        <div><strong>${esc(f.completo)}</strong><small class="tenue">${FGM.pos(f.pos)} · ${esc(f.club)} · ${esc(f.nacion)}</small>
+        <small>${f.pj} PJ · ${f.goles} G · ${f.asis} A${f.amarillas ? ' · 🟨' + f.amarillas : ''} ${estado}</small></div>
+        <a href="/carta/${f.carta}.png" target="_blank" class="enlace">Ver carta</a></div>
+      <div class="barras">${barras}</div>
+      <div class="d-vender"><button class="enlace" id="vender-uno">Vender · 🪙 ${f.venta.toLocaleString('es-CL')}</button></div>`;
+    $('vender-uno').onclick = () => vender([f.pid]);
+    detalle.hidden = false;
+    reanimar(detalle, 'entra');
+  }
+
+  // ---------- mover jugadores
+  function colocar(i, pid) {
+    const desde = once.indexOf(pid), anterior = once[i];
+    once[i] = pid;
+    if (desde >= 0 && desde !== i) once[desde] = anterior;
+    seleccion = null;
+    pintar(desde >= 0 ? [i, desde] : [i]);
+    guardar();
+  }
+  function quitar(i) { once[i] = null; seleccion = null; pintar([i]); guardar(); }
+
+  function clickSlot(i) {
+    if (vendiendo) return;
+    if (!seleccion) { seleccion = {tipo: 'slot', i}; pintar(); return; }
+    if (seleccion.tipo === 'slot') {
+      if (seleccion.i === i) { seleccion = null; pintar(); return; }
+      const a = seleccion.i;
+      [once[a], once[i]] = [once[i], once[a]];
+      seleccion = null; pintar([a, i]); guardar(); return;
+    }
+    colocar(i, seleccion.pid);
+  }
+  function clickReserva(pid) {
+    if (vendiendo) {
+      aVender.has(pid) ? aVender.delete(pid) : aVender.add(pid);
+      pintarReservas(); barraVenta(); return;
+    }
+    if (seleccion && seleccion.tipo === 'slot') { colocar(seleccion.i, pid); return; }
+    seleccion = seleccion && seleccion.pid === pid ? null : {tipo: 'reserva', pid};
+    pintar();
+  }
+  cancha.addEventListener('click', e => { const s = e.target.closest('.slot'); if (s) clickSlot(+s.dataset.i); });
+  banca.addEventListener('click', e => { const s = e.target.closest('.slot'); if (s) clickSlot(+s.dataset.i); });
+  reservas.addEventListener('click', e => { const c = e.target.closest('.mini[data-pid]'); if (c) clickReserva(+c.dataset.pid); });
+
+  let arrastrado = null;
+  document.addEventListener('dragstart', e => {
+    const c = e.target.closest('.mini[data-pid]'); if (!c || vendiendo) return;
+    arrastrado = +c.dataset.pid; e.dataTransfer.effectAllowed = 'move'; c.classList.add('arrastrando');
+  });
+  document.addEventListener('dragend', () => { arrastrado = null; document.querySelectorAll('.arrastrando,.sobre-aqui').forEach(x => x.classList.remove('arrastrando', 'sobre-aqui')); });
+  cancha.addEventListener('dragover', e => {
+    const s = e.target.closest('.slot'); if (!s || !arrastrado) return;
+    e.preventDefault(); document.querySelectorAll('.sobre-aqui').forEach(x => x.classList.remove('sobre-aqui')); s.classList.add('sobre-aqui');
+  });
+  cancha.addEventListener('drop', e => { const s = e.target.closest('.slot'); if (s && arrastrado) { e.preventDefault(); colocar(+s.dataset.i, arrastrado); } });
+  banca.addEventListener('dragover', e => {
+    const s = e.target.closest('.slot'); if (!s || !arrastrado) return;
+    e.preventDefault(); document.querySelectorAll('.sobre-aqui').forEach(x => x.classList.remove('sobre-aqui')); s.classList.add('sobre-aqui');
+  });
+  banca.addEventListener('drop', e => { const s = e.target.closest('.slot'); if (s && arrastrado) { e.preventDefault(); colocar(+s.dataset.i, arrastrado); } });
+  reservas.addEventListener('dragover', e => { if (arrastrado && once.includes(arrastrado)) e.preventDefault(); });
+  reservas.addEventListener('drop', e => { const i = once.indexOf(arrastrado); if (i >= 0) { e.preventDefault(); quitar(i); } });
+
+  $('filtros').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    filtro = b.dataset.f;
+    document.querySelectorAll('#filtros button').forEach(x => x.classList.toggle('activo', x === b));
+    pintarReservas();
+  });
+
+  // ---------- guardar alineación
+  function mostrarFuerza(v) { $('fuerza').textContent = 'Media ' + v.toFixed(1); reanimar($('fuerza'), 'pulso'); }
+  let timer = null;
+  function guardar(auto = false) {
+    clearTimeout(timer);
+    return new Promise(ok => timer = setTimeout(async () => {
+      try {
+        const j = await api('/api/alineacion', {formacion, mentalidad: $('mentalidad').value, once, auto});
+        mostrarFuerza(j.fuerza); toast('Guardado ✓'); ok(j);
+      } catch (e) { toast(e.message, {error: true}); ok(null); }
+    }, auto ? 0 : 350));
+  }
+  selF.addEventListener('change', () => { formacion = selF.value; seleccion = null; pintar(); guardar(); });
+  $('mentalidad').addEventListener('change', () => guardar());
+  $('auto').addEventListener('click', async () => {
+    const j = await guardar(true);
+    if (!j) return;
+    const cambiados = j.once.map((pid, i) => pid !== once[i] ? i : -1).filter(i => i >= 0);
+    once = j.once; seleccion = null; pintar(cambiados);
+  });
+
+  // ---------- vender (una o varias) con deshacer
+  function barraVenta() {
+    const total = [...aVender].reduce((a, pid) => a + porPid[pid].venta, 0);
+    $('bv-texto').innerHTML = `${aVender.size} carta${aVender.size === 1 ? '' : 's'} · 🪙 <b>${total.toLocaleString('es-CL')}</b>`;
+    $('bv-ok').disabled = !aVender.size;
+  }
+  $('modo-vender').onclick = () => {
+    vendiendo = !vendiendo; aVender.clear(); seleccion = null;
+    $('barra-venta').hidden = !vendiendo;
+    $('modo-vender').classList.toggle('activo', vendiendo);
+    barraVenta(); pintar();
+  };
+  $('bv-cancelar').onclick = () => $('modo-vender').click();
+  $('vender-repetidas').onclick = () => {
+    if (!vendiendo) $('modo-vender').click();
+    repetidas().sobran.forEach(pid => { if (!once.includes(pid)) aVender.add(pid); });
+    barraVenta(); pintarReservas();
+  };
+  $('bv-ok').onclick = () => vender([...aVender]);
+
+  async function vender(pids) {
+    const total = pids.reduce((a, pid) => a + porPid[pid].venta, 0);
+    if (pids.length > 1 && !confirm(`¿Vender ${pids.length} cartas por ${total.toLocaleString('es-CL')} monedas?`)) return;
+    // animación de salida
+    pids.forEach(pid => document.querySelectorAll(`[data-pid="${pid}"]`).forEach(el => el.classList.add('vendida')));
+    try {
+      const j = await api('/api/vender', {pids});
+      await new Promise(r => setTimeout(r, 380));
+      D.fichas = D.fichas.filter(f => !pids.includes(f.pid));
+      once = once.map(pid => pids.includes(pid) ? null : pid);
+      porPid = Object.fromEntries(D.fichas.map(f => [f.pid, f]));
+      seleccion = null; aVender.clear();
+      if (vendiendo) $('modo-vender').click(); else pintar();
+      FGM.monedas(j.monedas);
+      toast(`Vendida${pids.length > 1 ? 's' : ''} por ${j.monto.toLocaleString('es-CL')} 🪙`, {accion: 'Deshacer', ms: 8000, alHacer: deshacer});
+    } catch (e) {
+      document.querySelectorAll('.vendida').forEach(el => el.classList.remove('vendida'));
+      toast(e.message, {error: true});
+    }
+  }
+  async function deshacer() {
+    try { await api('/api/deshacer-venta'); location.reload(); }
+    catch (e) { toast(e.message, {error: true}); }
+  }
+
+  pintar();
+  mostrarFuerza(D.fuerza);
+
+  // ---------- alineaciones guardadas (hasta 5)
+  function pintarTabs() {
+    const al = D.alineaciones;
+    $('tabs-alin').innerHTML = al.map(a =>
+      `<button class="tab-alin ${a.activa ? 'activa' : ''}" data-id="${a.id}">${esc(a.nombre)}${a.activa ? ' <small>▶ juega</small>' : ''}</button>`).join('') +
+      (al.length < 5 ? '<button class="tab-alin nueva" data-accion="nueva">＋ Nueva</button>' : '') +
+      '<button class="tab-alin menu-alin" data-accion="menu" title="Renombrar o borrar">✎</button>';
+  }
+  $('tabs-alin').onclick = async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    try {
+      if (b.dataset.accion === 'nueva') {
+        const nombre = prompt('Nombre de la nueva alineación (se copia la actual):', 'Rotación');
+        if (!nombre) return;
+        await api('/api/alineaciones/nueva', {nombre});
+      } else if (b.dataset.accion === 'menu') {
+        const activa = D.alineaciones.find(a => a.activa);
+        const opcion = prompt(`Alineación "${activa.nombre}"\n· Escribe un nombre nuevo para renombrarla\n· Escribe BORRAR seguido del nombre de otra alineación para borrarla`, activa.nombre);
+        if (!opcion) return;
+        if (opcion.toUpperCase().startsWith('BORRAR ')) {
+          const nombre = opcion.slice(7).trim().toLowerCase();
+          const otra = D.alineaciones.find(a => a.nombre.toLowerCase() === nombre);
+          if (!otra) { toast('No encontré esa alineación', {error: true}); return; }
+          await api('/api/alineaciones/borrar', {id: otra.id});
+        } else {
+          await api('/api/alineaciones/renombrar', {id: activa.id, nombre: opcion});
+        }
+      } else {
+        if (b.classList.contains('activa')) return;
+        await api('/api/alineaciones/usar', {id: +b.dataset.id});
+      }
+      location.reload();
+    } catch (err) { toast(err.message, {error: true}); }
+  };
+  pintarTabs();
+})();
+</script>
+{% endblock %}

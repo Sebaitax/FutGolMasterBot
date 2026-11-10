@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta">
+  <h2>⚔️ Amistosos</h2>
+  <p class="tenue">Juega contra cualquier club, de cualquier división. Los amistosos no cuentan para la tabla, no dan premio y no dejan lesiones ni suspensiones: sirven para probar tu once y tus tácticas. Tu media: <b>{{ "%.1f"|format(mi_fuerza) }}</b>.</p>
+  <div class="local-visita">
+    <label><input type="radio" name="lado" value="1" checked> Jugar de local ({{ club }})</label>
+    <label><input type="radio" name="lado" value="0"> Jugar de visita</label>
+  </div>
+</section>
+
+{% for d in divisiones %}
+<section class="tarjeta">
+  <h3><span class="div-badge {{ d.clave }}">{{ d.nombre }}</span></h3>
+  <div class="rivales">
+    {% for c in d.clubes %}
+    {% set dif = mi_fuerza - c.fuerza %}
+    <form method="post" action="/amistoso/{{ c.id }}" class="rival" style="animation-delay: {{ loop.index0 * 30 }}ms">
+      <input type="hidden" name="de_local" value="1" class="campo-lado">
+      {{ escudo(c.nombre, "grande") }}
+      <strong>{{ c.nombre }}</strong>
+      <small class="tenue">🏟️ {{ c.estadio }}</small>
+      <small>Media <b>{{ "%.1f"|format(c.fuerza) }}</b> ·
+        {% if dif > 3 %}<span class="bien">fácil</span>{% elif dif < -3 %}<span class="mal">difícil</span>{% else %}<span class="medio">parejo</span>{% endif %}</small>
+      <button class="primario">▶ Jugar</button>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+<script>
+  document.querySelectorAll('input[name="lado"]').forEach(r => r.onchange = () =>
+    document.querySelectorAll('.campo-lado').forEach(c => c.value = r.value));
+</script>
+{% endblock %}

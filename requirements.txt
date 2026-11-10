@@ -1,4 +1,10 @@
-# Bot
+# Web local
+fastapi
+uvicorn
+jinja2
+python-multipart
+
+# Bot de Discord (en pausa)
 nextcord
 pymongo
 python-dotenv
@@ -10,5 +16,8 @@ requests
 selenium
 undetected-chromedriver
 
-# Simulador de partidos con IA (prototipo)
-openai
+# Tests de la web
+httpx
+
+# Opcional: quitar el fondo de las fotos (scraper.fotos_chile --recortar)
+rembg[cpu]

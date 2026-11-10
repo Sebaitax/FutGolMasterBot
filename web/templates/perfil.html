@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta perfil-cab{{ ' con-foto' if foto_estadio }}"{% if foto_estadio %} style="--foto: url('{{ foto_estadio }}')"{% endif %}>
+  <div class="pc-escudo">{{ escudo(club, "enorme") }}</div>
+  <div>
+    <h1>{{ club }}</h1>
+    <p class="pc-eslogan" id="vista-eslogan">{{ equipo.eslogan or "Sin eslogan todavía" }}</p>
+    <p class="tenue">🏟️ <span id="vista-estadio">{{ equipo.estadio }}</span>{% if hay_divisiones %} · <span class="div-badge {{ clave_div }}">{{ nombre_div }}</span>{% endif %}</p>
+  </div>
+</section>
+
+<section class="tarjeta">
+  <h2>Datos del club</h2>
+  <div class="form-perfil">
+    <label>Eslogan <input id="eslogan" maxlength="80" value="{{ equipo.eslogan or '' }}" placeholder="Ej.: ¡Hasta el final!"></label>
+    <label>Estadio <input id="estadio" maxlength="40" value="{{ equipo.estadio or '' }}"></label>
+    <button class="primario" id="guardar-datos">Guardar</button>
+  </div>
+</section>
+
+<section class="tarjeta">
+  <h2>Tu colección</h2>
+  <p class="tenue">Escudos y estadios que te salieron en sobres. Toca uno para usarlo.</p>
+  <h3>🏟️ Estadios</h3>
+  <div class="grilla-col" id="mis-estadios"></div>
+  <h3>🛡️ Escudos</h3>
+  <div class="grilla-col" id="mis-escudos"></div>
+</section>
+
+<section class="tarjeta">
+  <h2>Escudo</h2>
+  <div class="disenador">
+    <div class="ds-vista"><img id="vista-escudo" alt="Vista previa del escudo"></div>
+    <div class="ds-controles">
+      <div class="ds-grupo"><span>Forma</span>
+        <div class="ds-opciones" id="formas">{% for f in formas %}<button data-v="{{ f }}">{{ f|capitalize }}</button>{% endfor %}</div></div>
+      <div class="ds-grupo"><span>Diseño</span>
+        <div class="ds-opciones" id="simbolos">{% for s in simbolos %}<button data-v="{{ s }}">{{ s|capitalize }}</button>{% endfor %}</div></div>
+      <div class="ds-grupo"><span>Colores</span>
+        <div class="ds-colores">
+          <label>Principal <input type="color" id="c1"></label>
+          <label>Secundario <input type="color" id="c2"></label>
+        </div>
+        <div class="ds-paletas" id="paletas">
+          {% for a, b in colores %}<button data-a="{{ a }}" data-b="{{ b }}" style="background: linear-gradient(135deg, {{ a }} 50%, {{ b }} 50%)" title="{{ a }} / {{ b }}"></button>{% endfor %}
+        </div>
+      </div>
+      <label class="ds-grupo"><span>Iniciales</span><input id="texto" maxlength="3"></label>
+      <button class="primario" id="guardar-escudo">Usar este escudo</button>
+    </div>
+  </div>
+  <div class="subir-logo">
+    <p class="tenue">O sube tu propio logo (PNG o JPG, se guarda solo en tu PC){% if logo_subido %} · <b>ahora usas un logo subido</b>{% endif %}:</p>
+    <input type="file" id="archivo-logo" accept="image/png,image/jpeg,image/webp">
+  </div>
+</section>
+
+<section class="tarjeta">
+  <h2>Vitrina</h2>
+  <div class="vitrina">
+    <div class="trofeo"><b>{{ stats.titulos|length }}</b><span>🏆 Títulos</span></div>
+    <div class="trofeo"><b>{{ stats.ascensos|length }}</b><span>⬆ Ascensos</span></div>
+    <div class="trofeo"><b>{{ stats.temporadas }}</b><span>📅 Temporadas</span></div>
+  </div>
+  {% for t in stats.titulos %}
+  <p class="titulo-item">🏆 Campeón de la {{ t.nombre_division or "liga" }} · temporada {{ t.temporada }}</p>
+  {% endfor %}
+  {% set l, a = stats.record.liga, stats.record.amistoso %}
+  <table class="stats record">
+    <tr><th></th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th></tr>
+    <tr><th>Liga</th><td>{{ l.pj }}</td><td>{{ l.g }}</td><td>{{ l.e }}</td><td>{{ l.p }}</td><td>{{ l.gf }}</td><td>{{ l.gc }}</td></tr>
+    <tr><th>Amistosos</th><td>{{ a.pj }}</td><td>{{ a.g }}</td><td>{{ a.e }}</td><td>{{ a.p }}</td><td>{{ a.gf }}</td><td>{{ a.gc }}</td></tr>
+  </table>
+  {% if historial %}
+  <h3>Temporadas</h3>
+  <ul class="lista">
+    {% for h in historial|reverse %}
+    <li><span>T{{ h.temporada }} · {{ h.nombre_division or "Liga" }}</span>
+      <span>{{ h.posicion }}° · {{ h.puntos }} pts{% if h.posicion == 1 %} 🏆{% endif %}{% if h.movimiento == "asciende" %} ⬆{% elif h.movimiento == "desciende" %} ⬇{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<script>
+(() => {
+  const {api, toast, reanimar} = FGM;
+  const $ = id => document.getElementById(id);
+  const inicial = {{ diseno|tojson }};
+  const d = {forma: inicial.forma || 'clasico', c1: inicial.c1 || '#1f8a52', c2: inicial.c2 || '#ffffff',
+             simbolo: inicial.simbolo || 'banda', texto: inicial.texto || {{ club[:2]|upper|tojson }}};
+
+  function vista() {
+    $('vista-escudo').src = '/api/escudo/vista?' + new URLSearchParams(d);
+    reanimar($('vista-escudo'), 'pop');
+    document.querySelectorAll('#formas button').forEach(b => b.classList.toggle('activo', b.dataset.v === d.forma));
+    document.querySelectorAll('#simbolos button').forEach(b => b.classList.toggle('activo', b.dataset.v === d.simbolo));
+    $('c1').value = d.c1; $('c2').value = d.c2; $('texto').value = d.texto;
+  }
+  $('formas').onclick = e => { const b = e.target.closest('button'); if (b) { d.forma = b.dataset.v; vista(); } };
+  $('simbolos').onclick = e => { const b = e.target.closest('button'); if (b) { d.simbolo = b.dataset.v; vista(); } };
+  $('paletas').onclick = e => { const b = e.target.closest('button'); if (b) { d.c1 = b.dataset.a; d.c2 = b.dataset.b; vista(); } };
+  $('c1').oninput = e => { d.c1 = e.target.value; vista(); };
+  $('c2').oninput = e => { d.c2 = e.target.value; vista(); };
+  $('texto').oninput = e => { d.texto = e.target.value.toUpperCase(); vista(); };
+
+  $('guardar-escudo').onclick = async () => {
+    try { await api('/api/perfil', {escudo: d}); toast('Escudo guardado ✓'); setTimeout(() => location.reload(), 600); }
+    catch (e) { toast(e.message, {error: true}); }
+  };
+  $('guardar-datos').onclick = async () => {
+    try {
+      await api('/api/perfil', {eslogan: $('eslogan').value, estadio: $('estadio').value});
+      $('vista-eslogan').textContent = $('eslogan').value || 'Sin eslogan todavía';
+      $('vista-estadio').textContent = $('estadio').value;
+      reanimar($('vista-eslogan'), 'pulso');
+      toast('Guardado ✓');
+    } catch (e) { toast(e.message, {error: true}); }
+  };
+  $('archivo-logo').onchange = async e => {
+    const archivo = e.target.files[0]; if (!archivo) return;
+    const datos = new FormData(); datos.append('archivo', archivo);
+    const r = await fetch('/api/perfil/logo', {method: 'POST', body: datos});
+    const j = await r.json();
+    if (!r.ok) { toast(j.error, {error: true}); return; }
+    toast('Logo subido ✓'); setTimeout(() => location.reload(), 600);
+  };
+  vista();
+
+  // ---------- colección: equipar estadio o escudo
+  const estadios = {{ mis_estadios|tojson }}, escudos = {{ mis_escudos|tojson }};
+  const vacio = t => `<p class="tenue">Todavía no tienes ${t}. Salen en los sobres.</p>`;
+  $('mis-estadios').innerHTML = estadios.map(o => FGM.objeto(o)).join('') || vacio('estadios');
+  $('mis-escudos').innerHTML = escudos.map(o => FGM.objeto(o)).join('') || vacio('escudos');
+  document.querySelectorAll('#mis-estadios, #mis-escudos').forEach(g => g.onclick = async e => {
+    const el = e.target.closest('.objeto'); if (!el || el.querySelector('.obj-uso')) return;
+    try { await api(`/api/objeto/${el.dataset.oid}/usar`); toast('¡Listo!'); setTimeout(() => location.reload(), 500); }
+    catch (err) { toast(err.message, {error: true}); }
+  });
+})();
+</script>
+{% endblock %}
