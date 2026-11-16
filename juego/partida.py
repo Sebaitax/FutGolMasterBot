@@ -30,8 +30,10 @@ from juego import antitrampas
 
 # cartas que nunca se venden: ni venta rápida ni mercado de transferencias
 # cartas exclusivas: solo las entrega el admin (no salen en sobres ni en la carta gratis) y tampoco se venden
-EXCLUSIVAS = {"Mario Zúñiga"}
-INTRANSFERIBLES = {"Pablo Olivares"} | EXCLUSIVAS
+# Cartas "meme": no salen en sobres, ni en la carta gratis, ni en bots o clubes reales, ni en el álbum.
+# Solo las entrega el administrador a mano (y no se pueden vender).
+EXCLUSIVAS = {"Mario Zúñiga", "Pablo Olivares"}
+INTRANSFERIBLES = set(EXCLUSIVAS)
 from juego.bd import RUTA_POR_DEFECTO, conectar
 from models.carta import STATS, Carta, nivel_por_ovr
 from juego.formaciones import factor_quimica, quimica
@@ -131,6 +133,20 @@ class Partida:
     def __init__(self, con: sqlite3.Connection):
         self.con = con
         self.calidades: dict[int, str] = {}   # carta recién sacada (pid) -> normal, buena, estrella o crack
+        self._sacar_exclusivas_de_bots()
+
+    def _sacar_exclusivas_de_bots(self):
+        """Las cartas exclusivas no juegan en ningún bot ni club real (partidas creadas antes de la regla)."""
+        try:
+            if self._get("exclusivas_fuera_de_bots") == sorted(EXCLUSIVAS):
+                return
+            marcas = ",".join("?" * len(EXCLUSIVAS))
+            self.con.execute(f"DELETE FROM plantilla WHERE equipo_id IN (SELECT id FROM equipos WHERE es_usuario = 0)"
+                             f" AND carta_id IN (SELECT id FROM cartas WHERE nombre IN ({marcas}))", tuple(EXCLUSIVAS))
+            self._set("exclusivas_fuera_de_bots", sorted(EXCLUSIVAS))
+            self.con.commit()
+        except sqlite3.Error:
+            pass   # partida vacía o a medio crear
 
     @classmethod
     def abrir(cls, ruta: str | Path = RUTA_POR_DEFECTO) -> "Partida":
@@ -278,8 +294,8 @@ class Partida:
         clubes = [r["club"] for r in self.con.execute("SELECT DISTINCT club FROM cartas ORDER BY club")]
         for club in clubes:
             cur = self.con.execute("INSERT INTO equipos (nombre) VALUES (?)", (club,))
-            self.con.execute("INSERT INTO plantilla (equipo_id, carta_id) SELECT ?, id FROM cartas WHERE club = ?",
-                             (cur.lastrowid, club))
+            self.con.execute("INSERT INTO plantilla (equipo_id, carta_id) SELECT ?, id FROM cartas WHERE club = ?"
+                             f" AND nombre NOT IN ({','.join('?' * len(EXCLUSIVAS))})", (cur.lastrowid, club, *EXCLUSIVAS))
         fuerzas = {e["id"]: fuerza([f.jugador() for f in self.plantel(e["id"])]) for e in self._bots()}
         orden = sorted(fuerzas, key=lambda e: -fuerzas[e])
 
@@ -1114,10 +1130,25 @@ class Partida:
             return 0
         tengo = {(r["nombre"], r["club"]) for r in self.con.execute("SELECT nombre, club FROM cartas")}
         clubes_antes = {r[0] for r in self.con.execute("SELECT DISTINCT club FROM cartas")}
-        nuevas = 0
+        # cartas que ya estaban: se les actualiza la media, atributos, precio y edad si el catálogo cambió
+        # (p. ej. al recalcular las medias). Se reconocen por nombre + club + posición (hay homónimos en un
+        # mismo club, como los dos Matheuzinho del Vitória); el nivel de mejora vive en el plantel y se mantiene.
+        por_clave: dict[tuple, list[int]] = {}
+        for r in self.con.execute("SELECT id, nombre, club, posicion FROM cartas"):
+            por_clave.setdefault((r["nombre"], r["club"], r["posicion"]), []).append(r["id"])
+        nuevas = actualizadas = 0
         for ruta in rutas:
             with open(ruta, newline="", encoding="utf-8") as fh:
                 for f in csv.DictReader(fh):
+                    ids = por_clave.get((f["Nombre"], f["Club"], f["Posición"]), [])
+                    if len(ids) == 1:
+                        valores = (int(f["OVR"]), *(int(f[s]) for s in STATS), int(f.get("Precio") or 0), int(f.get("Edad") or 0),
+                                   f.get("Alias", ""))
+                        cur = self.con.execute(
+                            "UPDATE cartas SET ovr = ?, pac = ?, sho = ?, pas = ?, dri = ?, def = ?, phy = ?, precio = ?, edad = ?, alias = ?"
+                            " WHERE id = ? AND (ovr, pac, sho, pas, dri, def, phy, precio, edad, alias) IS NOT (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (*valores, ids[0], *valores))
+                        actualizadas += cur.rowcount
                     if (f["Nombre"], f["Club"]) in tengo:
                         continue
                     self.con.execute(
@@ -1532,7 +1563,8 @@ class Partida:
         return ESC.PAISES.get(self.pais, ESC.PAISES[ESC.PAIS_DEFECTO])[2]
 
     def _ovrs_liga(self) -> list[int]:
-        return [r[0] for r in self.con.execute("SELECT ovr FROM cartas WHERE liga = ? ORDER BY ovr", (self._liga_pais(),))]
+        return [r["ovr"] for r in self.con.execute("SELECT ovr, nombre FROM cartas WHERE liga = ? ORDER BY ovr", (self._liga_pais(),))
+                if r["nombre"] not in EXCLUSIVAS]
 
     def _carta_por_cuantil(self, rng: random.Random, q: float, ln: str | None = None, excluir: set | None = None,
                            todas: bool = False) -> int | None:

@@ -455,7 +455,16 @@ def main():
     planteles = json.loads(Path(archivo_planteles(args.liga, args.anio)).read_text(encoding="utf-8"))
     stats = json.loads(Path(archivo_stats(args.liga, args.anio)).read_text(encoding="utf-8"))
     desde_365 = planteles.get("fuente") == "365"
-    valorador = (Valorador365 if desde_365 else Valorador)(planteles, stats, escala=cfg["ovr"])
+    if desde_365:
+        # v2: suma xG/xA, toques, goles evitados, último traspaso y selección de ESTA temporada (cartas/valoracion_v2.py)
+        from cartas.valoracion_v2 import Valorador365v2, enriquecer
+        from scraper.fotos_365 import COMPETICION
+        for club in planteles["clubes"]:
+            for j in club["jugadores"]:
+                enriquecer(j, COMPETICION[args.liga], date.today())
+        valorador = Valorador365v2(planteles, stats, escala=cfg["ovr"])
+    else:
+        valorador = Valorador(planteles, stats, escala=cfg["ovr"])
     ruta_manual = Path(f"data/ovr_manual_{args.liga}_{args.anio}.json")
     if ruta_manual.exists():
         # {"<id_365>": {"ovr": 83, "nombre": "...", "motivo": "..."}}

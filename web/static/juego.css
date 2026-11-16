@@ -917,3 +917,4 @@ a.club:hover { color: var(--verde); }
 .musica-yt { position: fixed; left: -400px; top: 0; width: 200px; height: 200px; opacity: 0; pointer-events: none; }
 .musica-btn { padding: 4px 8px; font-size: 1rem; line-height: 1; border-radius: 99px; background: transparent; border: 1px solid var(--borde); }
 .musica-btn.apagada { opacity: .6; }
+.aviso-monedas { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; background: rgba(242, 182, 48, .14); font-size: .88rem; line-height: 1.35; }

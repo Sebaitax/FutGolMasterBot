@@ -106,7 +106,9 @@
     if (f.mejora >= D.maximo) boton = '<p class="tenue">Nivel máximo alcanzado</p>';
     else if (f.copias < 2) boton = '<p class="tenue">Consigue otra copia de este jugador (sobres o carta gratis) para mejorarlo.</p>';
     else boton = `<button class="primario grande-btn" id="btn-mejorar" ${monedas < f.costo_mejora ? 'disabled' : ''}>
-        ${FGM_ICO('arrow-up')} Mejorar a nivel ${f.mejora + 1} · ${FGM_ICO('moneda')} ${f.costo_mejora.toLocaleString('es-CL')}<br><small>gasta 1 copia repetida</small></button>`;
+        ${FGM_ICO('arrow-up')} Mejorar a nivel ${f.mejora + 1} · ${FGM_ICO('moneda')} ${f.costo_mejora.toLocaleString('es-CL')}<br><small>gasta 1 copia repetida</small></button>`
+        + (monedas < f.costo_mejora ? `<p class="aviso-monedas">${FGM_ICO('moneda')} Te faltan <b>${(f.costo_mejora - monedas).toLocaleString('es-CL')}</b> monedas para mejorarlo.
+            Gana partidos por copas o vende repetidas que no uses.</p>` : '');
     ficha.innerHTML = `
       <button class="enlace cerrar" id="cerrar" aria-label="Cerrar">${FGM_ICO('x')}</button>
       <div class="fi-cab">
