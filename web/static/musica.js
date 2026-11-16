@@ -2,8 +2,8 @@
 // Para que la canción no se corte al cambiar de página, la música vive en un "marco"
 // (/static/marco.html) que nunca se recarga, y el juego corre adentro en un iframe.
 // - Si la música está prendida y no estamos en el marco, se pasa al marco una vez.
-// - Adentro del marco: el botón 🎵 la prende/apaga y cada página avisa si es un partido
-//   (en los partidos se pausa: ahí está el sonido del estadio).
+// - Adentro del marco: el botón de música la prende/apaga (en todas las páginas, partidos incluidos)
+//   y cada página avisa si es un partido.
 (() => {
   const leer = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -23,7 +23,7 @@
   boton.className = 'musica-btn';
   boton.type = 'button';
   const pintar = () => {
-    boton.textContent = activa ? '🎵' : '🔇';
+    boton.innerHTML = FGM_ICO(activa ? 'music' : 'volume-x');
     boton.title = activa ? 'Música: prendida (toca para apagar)' : 'Música: apagada (toca para prender)';
     boton.classList.toggle('apagada', !activa);
   };

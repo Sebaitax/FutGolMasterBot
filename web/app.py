@@ -9,8 +9,9 @@ Desde la misma PC (127.0.0.1) se usa data/partida.sqlite (o la ruta de la variab
 import re
 import time as _time
 import uuid
+from urllib.parse import unquote
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from web import bitacora, cuentas
 from web.comun import AQUI, COOKIE_PARTIDA, ESCUDOS, ESTADIOS, PRINCIPAL, RENDERS, SILENCIOSAS
@@ -24,6 +25,41 @@ if ESCUDOS.is_dir():
     app.mount("/escudos", StaticFiles(directory=ESCUDOS), name="escudos")
 app.mount("/estadios", StaticFiles(directory=ESTADIOS), name="estadios")
 app.mount("/renders", StaticFiles(directory=RENDERS), name="renders")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(AQUI / "static" / "logo" / "favicon.ico", headers={"Cache-Control": "public, max-age=604800"})
+
+
+_CARPETAS_IMG = {"/renders/": RENDERS, "/escudos/": ESCUDOS, "/estadios/": ESTADIOS}
+_UNA_SEMANA = "public, max-age=604800"
+
+
+@app.middleware("http")
+async def _imagenes_livianas(request: Request, call_next):
+    """Fotos, escudos y estadios: si el navegador acepta WebP y existe la versión .webp
+    (scripts/comprimir_imagenes.py), se manda esa (~10 veces más liviana) en vez del PNG/JPG.
+    Y todo lo estático se guarda en el navegador para no volver a descargarlo."""
+    ruta = request.url.path
+    if request.method == "GET":
+        for prefijo, carpeta in _CARPETAS_IMG.items():
+            if ruta.startswith(prefijo) and "image/webp" in request.headers.get("accept", ""):
+                nombre = unquote(ruta[len(prefijo):])
+                if "/" not in nombre and not nombre.startswith("."):
+                    webp = (carpeta / nombre).with_suffix(".webp")
+                    if webp.is_file():
+                        return FileResponse(webp, media_type="image/webp",
+                                            headers={"Cache-Control": _UNA_SEMANA, "Vary": "Accept"})
+                break
+    respuesta = await call_next(request)
+    if respuesta.status_code == 200 and request.method == "GET":
+        if ruta.startswith(tuple(_CARPETAS_IMG)) or ruta.startswith(("/fuentes/", "/static/logo/", "/static/canchas/", "/static/sobres/")):
+            respuesta.headers.setdefault("Cache-Control", _UNA_SEMANA)
+        elif ruta.startswith("/static/"):
+            # con ?v= (versión del archivo) puede guardarse mucho; sin versión, una hora
+            respuesta.headers.setdefault("Cache-Control", "public, max-age=2592000, immutable" if "v=" in request.url.query else "public, max-age=3600")
+    return respuesta
 
 
 @app.middleware("http")
@@ -65,7 +101,7 @@ async def _partida_del_navegador(request: Request, call_next):
         bitacora.anotar("excepcion", f"{type(e).__name__}: {e}", "error", traceback.format_exc(), estado=500, ms=ms)
         if ruta.startswith("/api/"):
             return JSONResponse({"error": "Algo falló en el servidor. Ya quedó anotado para arreglarlo."}, status_code=500)
-        return HTMLResponse("<h1>Algo falló 😵</h1><p>Ya quedó anotado para arreglarlo. <a href='/'>Volver al inicio</a></p>",
+        return HTMLResponse("<h1>Algo falló</h1><p>Ya quedó anotado para arreglarlo. <a href='/'>Volver al inicio</a></p>",
                             status_code=500)
     ms = int((_time.perf_counter() - t0) * 1000)
     silenciosa = ruta.startswith(SILENCIOSAS) or ruta.endswith("/estado")
@@ -92,9 +128,11 @@ import web.rutas.amistosos  # noqa: E402
 import web.rutas.vivo  # noqa: E402
 import web.rutas.apuestas  # noqa: E402
 import web.rutas.admin  # noqa: E402
+import web.rutas.album  # noqa: E402
 
 
 app.include_router(web.rutas.cuentas.router)
+app.include_router(web.rutas.album.router)
 app.include_router(web.rutas.inicio.router)
 app.include_router(web.rutas.partido.router)
 app.include_router(web.rutas.plantel.router)

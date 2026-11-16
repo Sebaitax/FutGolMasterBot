@@ -29,22 +29,24 @@ PAIS_DEFECTO = "chile"
 
 # nombre, copas para llegar, cuantil de la fuerza de los bots, emoji, tema visual, descripción
 CANCHAS = [
-    ("Cancha del Barrio", 0, 0.05, "🏘️", "barrio", "Pichanga entre vecinos: arcos de piedra y la pelota que se va a la calle."),
-    ("Cancha de Tierra", 150, 0.13, "🟫", "tierra", "Polvo, piedras y botines gastados. Acá se forja el carácter."),
-    ("Estadio Municipal", 350, 0.22, "🏟️", "municipal", "Pasto a medias, una tribuna de madera y el alcalde mirando."),
+    ("Cancha del Barrio", 0, 0.0, "🏘️", "barrio", "Pichanga entre vecinos: arcos de piedra y la pelota que se va a la calle."),
+    ("Cancha de Tierra", 150, 0.07, "🟫", "tierra", "Polvo, piedras y botines gastados. Acá se forja el carácter."),
+    ("Estadio Municipal", 350, 0.17, "🏟️", "municipal", "Pasto a medias, una tribuna de madera y el alcalde mirando."),
     ("Décima División", 600, 0.30, "🔟", "decima", "Tu primer torneo oficial. Ya hay árbitro con silbato."),
-    ("Novena División", 900, 0.37, "9️⃣", "novena", "Canchas de pasto y rivales que entrenan dos veces por semana."),
-    ("Octava División", 1200, 0.44, "8️⃣", "octava", "Llegan los primeros hinchas y los camarines con agua caliente."),
-    ("Séptima División", 1500, 0.51, "7️⃣", "septima", "Equipos con historia de barrio y barra propia."),
-    ("Sexta División", 1800, 0.58, "6️⃣", "sexta", "Estadios con iluminación: se juega de noche."),
-    ("Quinta División", 2100, 0.65, "5️⃣", "quinta", "Fútbol semiprofesional: ojeadores en la tribuna."),
-    ("Cuarta División", 2400, 0.72, "4️⃣", "cuarta", "Planteles profesionales y prensa local."),
-    ("Tercera División", 2700, 0.79, "3️⃣", "tercera", "Estadios llenos y televisión regional."),
-    ("Segunda División", 3000, 0.87, "2️⃣", "segunda", "A un paso de la élite: cada punto vale oro."),
+    ("Novena División", 900, 0.42, "9️⃣", "novena", "Canchas de pasto y rivales que entrenan dos veces por semana."),
+    ("Octava División", 1200, 0.50, "8️⃣", "octava", "Llegan los primeros hinchas y los camarines con agua caliente."),
+    ("Séptima División", 1500, 0.57, "7️⃣", "septima", "Equipos con historia de barrio y barra propia."),
+    ("Sexta División", 1800, 0.64, "6️⃣", "sexta", "Estadios con iluminación: se juega de noche."),
+    ("Quinta División", 2100, 0.71, "5️⃣", "quinta", "Fútbol semiprofesional: ojeadores en la tribuna."),
+    ("Cuarta División", 2400, 0.78, "4️⃣", "cuarta", "Planteles profesionales y prensa local."),
+    ("Tercera División", 2700, 0.84, "3️⃣", "tercera", "Estadios llenos y televisión regional."),
+    ("Segunda División", 3000, 0.90, "2️⃣", "segunda", "A un paso de la élite: cada punto vale oro."),
     ("Primera División", 3400, 0.95, "🏆", "primera", "La máxima categoría de tu país. Solo los mejores."),
 ]
 
-COPAS_VICTORIA, COPAS_DERROTA, COPAS_EMPATE = 32, 26, 4
+COPAS_VICTORIA, COPAS_DERROTA, COPAS_EMPATE = 40, 22, 8
+CANCHA_TODAS_LAS_LIGAS = 3   # desde la Décima División los sobres traen jugadores de todas las ligas
+BOTS_TODAS_LAS_LIGAS = 3     # y los bots también (así la dificultad sube pareja)
 
 # sobres por tiempo (se ganan al ganar): se repite este ciclo
 SOBRES_TIEMPO = SOBRES   # los mismos de la tienda (básico 3 h, súper 8 h, premium 12 h)
@@ -108,6 +110,8 @@ def calidad_sobre(rng, probabilidades: dict | None = None) -> str:
 def cuantil_calidad(rng, cancha: int, calidad: str) -> float:
     """Dónde cae la carta dentro de tu liga (cuantil de la media) según su calidad y tu cancha."""
     base = CANCHAS[cancha][2]
+    if calidad == "crack":   # el 1,5 % mejor de todas las ligas, en cualquier cancha
+        return rng.uniform(0.985, 1.0)
     if calidad == "estrella":
         q = rng.uniform(max(base + 0.22, 0.88), 1.0)
     elif calidad == "buena":

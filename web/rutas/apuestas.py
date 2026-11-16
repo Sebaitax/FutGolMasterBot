@@ -8,6 +8,8 @@ from juego.partida import ErrorJuego, Partida
 from web import bitacora
 from web.comun import P, _nombre_club, _yo, error_json, ir, pagina, ruta_de
 
+from web.iconos import bandera_url as _bandera_url  # noqa: E402
+
 router = APIRouter()
 
 # ------------------------------------------------------------------ apuestas a partidos reales
@@ -36,7 +38,7 @@ def ver_apuestas(request: Request, liga: str = "chile", p: Partida = P):
     ranking = [{**r, "club": _nombre_club(r["pid"], minuto) or r["club"], "yo": r["pid"] == yo} for r in apuestas.ranking()]
     for r in ranking:
         del r["pid"]
-    datos = {"liga": liga, "ligas": [{"clave": k, "nombre": n, "bandera": b, "partidos": len(apuestas.proximos(k))}
+    datos = {"liga": liga, "ligas": [{"clave": k, "nombre": n, "bandera": b, "bandera_img": _bandera_url(b), "partidos": len(apuestas.proximos(k))}
                                      for k, (n, b, _) in apuestas.LIGAS.items()],
              "proximos": apuestas.proximos(liga), "recientes": apuestas.recientes(liga),
              "mias": apuestas.mis_apuestas(yo), "ranking": ranking, "minima": apuestas.APUESTA_MINIMA,

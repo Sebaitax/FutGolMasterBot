@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FutGolMaster</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/logo/icono-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/logo/icono-192.png">
+<link rel="apple-touch-icon" href="/static/logo/icono-180.png">
+<meta name="theme-color" content="#08130f">
 <style>
   html, body { margin: 0; height: 100%; background: #0f1512; overflow: hidden; }
   #juego { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -19,9 +24,37 @@
   const LISTA = 'PL94p9Gzt5VPBKouIudP9X8oS1jY9ntAaO';
   const VOLUMEN = 12;
   // videos de la playlist que se cambian por otra versión (p. ej. el videoclip con ruidos -> versión con letra)
+  // todas las canciones en versión con letra (los videoclips traen ruidos y partes que no son la canción)
   const REEMPLAZOS = {
-    'u9WgtlgGAgs': 'EvIG8Gl6038',   // The Cardigans - My Favourite Game: "Stone Version" (videoclip) -> Lyric Video oficial
+    'TUx6W2Ek3rY': 'lzQJAnSpNEI',   // Los Miserables - El Crack
+    'HyHNuVaZJ-k': 'IbpOfzrNjTY',   // Gorillaz - Feel Good Inc. (7clouds)
+    'OMaycNcPsHI': 'nwcP1dJuWoY',   // Placebo - Every You Every Me
+    'u9WgtlgGAgs': 'EvIG8Gl6038',   // The Cardigans - My Favourite Game (Lyric Video oficial)
+    'gOMhN-hfMtY': 'S-smUALTlFM',   // Eminem - Stan ft. Dido (7clouds)
+    'qN3Y3Z5-3sw': '7Y3EZ29Mgak',   // Attaque 77 - No me arrepiento de este amor
+    'KotlCEGNbh8': 'q95ZKqE5dfU',   // The Cranberries - Salvation
+    'eTdEmut8luM': '6HXKwGNeQ1w',   // Attaque 77 - Western
+    'fPO76Jlnz6c': 'V79D8__4W9g',   // Coolio - Gangsta's Paradise
+    '8bbTtPL1jRs': 'HMjI64xSxqo',   // My Chemical Romance - Famous Last Words
+    'Zxw2Iwu__IY': 'dgUrWj-gkfA',   // Green Day - Poprocks And Coke
+    'pjPA7CXutDw': 'I3Ybiq-SUYw',   // Los Fabulosos Cadillacs - Matador
+    'us8OhI-OTHg': 'PchXs7ZH1OI',   // The Offspring - All I Want
+    'UtF6Jej8yb4': '2S0QhGGO1gQ',   // Avicii - The Nights (si se agrega el videoclip a la lista)
+    'CfihYWRWRTQ': 'jLPE5KlWeVI',   // John Newman - Love Me Again
+    'wAjHQXrIj9o': 'AfaL4eTIzZ8',   // Bad Bunny ft. Bomba Estéreo - Ojitos Lindos
   };
+  // canciones que se suman a la playlist (ya en versión con letra)
+  const EXTRAS = [
+    'cxmMD5OvYRQ',   // Imagine Dragons - On Top Of The World (Lyric Video oficial)
+    '2S0QhGGO1gQ',   // Avicii - The Nights (7clouds)
+    'jLPE5KlWeVI',   // John Newman - Love Me Again (7clouds)
+    'YGCKTms4LWo',   // Empire of the Sun - Alive (lyrics)
+    'AfaL4eTIzZ8',   // Bad Bunny ft. Bomba Estéreo - Ojitos Lindos (Letra)
+    'ALRxqOpMewE',   // Michel Teló - Ai Se Eu Te Pego (7clouds Brazil)
+    'ilLEuwH4hws',   // Bastille - Pompeii (Lyric Video oficial)
+    'TXGbhniTBrU',   // Queen - We Will Rock You (Lyrics)
+  ];
+  const ORIGINAL = Object.fromEntries(Object.entries(REEMPLAZOS).map(([o, r]) => [r, o]));
   const leer = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
   const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -32,7 +65,7 @@
   const destino = decodeURIComponent(location.hash.slice(1)) || '/';
   juego.src = destino.startsWith('/') && !destino.startsWith('//') ? destino : '/';
 
-  function debeSonar() { return activa && !enPartido; }
+  function debeSonar() { return activa; }   // también suena en los partidos (el botón de música la apaga)
   function aplicar() {
     if (!listo) return;
     if (debeSonar()) { player.setVolume(VOLUMEN); if (!sonando) player.playVideo(); }
@@ -64,7 +97,7 @@
           const armar = () => {
             const base = player.getPlaylist() || [];
             if (!base.length && intentos++ < 40) return setTimeout(armar, 250);
-            const ids = base.map(id => REEMPLAZOS[id] || id);
+            const ids = [...new Set([...base.map(id => REEMPLAZOS[id] || id), ...EXTRAS])];
             for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
             if (!ids.length) { listo = true; aplicar(); return; }
             // YouTube a veces pisa la lista nueva con la original que aún estaba cargando: se insiste hasta que quede
@@ -85,7 +118,14 @@
           if (sonando && !debeSonar()) player.pauseVideo();
           if (e.data === YT.PlayerState.ENDED) player.nextVideo();
         },
-        onError: () => { try { player.nextVideo(); } catch {} },
+        // si la versión con letra no se deja reproducir acá, suena la original (no se salta la canción)
+        onError: () => {
+          try {
+            const id = player.getVideoData().video_id, orig = ORIGINAL[id];
+            if (orig) { const lista = player.getPlaylist(), i = player.getPlaylistIndex(); lista[i] = orig; player.loadPlaylist(lista, i); }
+            else player.nextVideo();
+          } catch { try { player.nextVideo(); } catch {} }
+        },
       },
     });
   };

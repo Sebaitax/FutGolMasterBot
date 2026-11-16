@@ -22,21 +22,23 @@ MULTIPLICADOR_DIVISION = {0: 1.0, 1: 1.5, 2: 2.0}
 # Sobres: cada carta sale de la liga de tu país y su calidad depende de tu cancha (escalera de copas):
 #   normal = del nivel de tu cancha · buena = mejor que tu cancha · estrella = de las mejores de tu liga
 # Los mismos tres sobres se compran en la tienda o se ganan al ganar partidos (sobres por tiempo).
-# "objeto": probabilidad de que cada lugar traiga un escudo o estadio de colección.
+# "objetos": escudos o estadios de colección que vienen APARTE de las cartas (no quitan jugadores):
+#   (cuántos vienen seguro, probabilidad de uno más)
 CALIDADES = {
     "normal": "Del nivel de tu cancha",
     "buena": "Mejor que tu cancha",
     "estrella": "De las mejores de tu liga",
+    "crack": "Un crack de cualquier liga (muy raro)",
 }
 SOBRES = {
-    "basico": {"nombre": "Sobre básico", "precio": 1500, "cartas": 3, "horas": 3, "ico": "📦", "objeto": 0.05,
-               "probabilidades": {"normal": 0.80, "buena": 0.18, "estrella": 0.02}},
-    "super": {"nombre": "Súper sobre", "precio": 4000, "cartas": 5, "horas": 8, "ico": "🎁", "objeto": 0.10,
-              "probabilidades": {"normal": 0.65, "buena": 0.30, "estrella": 0.05}},
-    "premium": {"nombre": "Sobre premium", "precio": 9000, "cartas": 7, "horas": 12, "ico": "💎", "objeto": 0.18,
-                "probabilidades": {"normal": 0.45, "buena": 0.42, "estrella": 0.13}},
+    "basico": {"nombre": "Sobre básico", "precio": 1500, "cartas": 3, "horas": 3, "ico": "📦", "objetos": (0, 0.15),
+               "probabilidades": {"normal": 0.795, "buena": 0.18, "estrella": 0.02, "crack": 0.005}},
+    "super": {"nombre": "Súper sobre", "precio": 3500, "garantia": "buena", "cartas": 5, "horas": 8, "ico": "🎁", "objetos": (0, 0.50),
+              "probabilidades": {"normal": 0.64, "buena": 0.30, "estrella": 0.05, "crack": 0.01}},
+    "premium": {"nombre": "Sobre premium", "precio": 7000, "garantia": "estrella", "cartas": 7, "horas": 12, "ico": "💎", "objetos": (1, 0.25),
+                "probabilidades": {"normal": 0.42, "buena": 0.42, "estrella": 0.13, "crack": 0.03}},
 }
-RAREZA_OBJETO = {"normal": "bronce", "buena": "plata", "estrella": "oro"}
+RAREZA_OBJETO = {"normal": "bronce", "buena": "plata", "estrella": "oro", "crack": "oro"}
 
 
 def precio_sobre(clave: str, cancha: int = 0) -> int:

@@ -1,22 +1,21 @@
 {% extends "base.html" %}
 {% block clase_body %}pantalla-partido{% endblock %}
 {% block contenido %}
+{# Partido en vivo entre jugadores: misma pantalla, ritmo y animación que contra la máquina
+   (módulos de /static/partido/, Preact + htm). La versión anterior: vivo_v1.html (?pantalla=vieja). #}
 <section class="tarjeta marcador-vivo">
   <div class="mv-equipo"><img class="escudo grande" src="/escudo/amigo/{{ vp.pids[0] }}" alt=""><span>{{ vp.local }}</span></div>
-  <div class="mv-centro">
-    <div class="mv-goles"><b id="g0">0</b><i>-</i><b id="g1">0</b></div>
-    <div class="mv-reloj"><span id="reloj">0'</span><small id="periodo">1T</small></div>
-  </div>
+  <div class="mv-centro" id="ui-numeros"></div>
   <div class="mv-equipo"><img class="escudo grande" src="/escudo/amigo/{{ vp.pids[1] }}" alt=""><span>{{ vp.visita }}</span></div>
-  <p class="mv-estadio">⚡ En vivo entre amigos <span id="apuesta"></span> <span id="conexion" class="tenue"></span>
-    <button id="sonido" class="chico-btn" title="Sonido">🔊</button></p>
+  <p class="mv-estadio">{{ ico('punto-rojo') }} En vivo <span id="apuesta"></span> <span id="conexion" class="tenue"></span></p>
 </section>
 <div class="reacciones" id="reacciones"></div>
 <div class="reaccion-lluvia" id="lluvia"></div>
 
 <div class="partido-grid">
 <section class="tarjeta">
-  <div class="estadio" id="estadio">
+  <div class="controles-vivo" id="ui-controles"></div>
+  <div class="estadio pvp" id="estadio">
     <div class="pasto"></div>
     <div class="lin medio"></div><div class="lin circulo"></div>
     <div class="lin area izq"></div><div class="lin area der"></div>
@@ -25,342 +24,20 @@
     <div class="arco izq" id="arco-izq"></div><div class="arco der" id="arco-der"></div>
     <div id="fichas"></div>
     <div class="pelota" id="pelota"></div>
+    <div class="aviso-jugada" id="aviso-jugada"></div>
     <div class="anuncio" id="anuncio"></div>
   </div>
-  <div class="vv-posesion"><span id="pos0">50%</span><div class="vv-pbarra"><i id="pbarra"></i></div><span id="pos1">50%</span></div>
-  <div class="relato-actual" id="relato-actual" aria-live="polite"></div>
-  <div class="tacticas" id="tacticas">
-    <div class="t-cab"><b>Táctica</b><small class="t-rival" id="t-rival"></small><button class="t-ayuda enlace" id="t-ayuda" type="button">❓ ¿Cuál le gana a cuál?</button></div>
-    <div class="t-guia" id="t-guia" hidden></div>
-    <div class="t-chips" id="t-chips"></div>
-  </div>
-  <details class="relato-todo">
-    <summary>📜 Relato completo</summary>
-    <ol id="relato" class="relato"></ol>
-  </details>
+  <div id="ui-relato-actual"></div>
+  <div id="ui-tacticas"></div>
+  <div id="ui-indicadores"></div>
+  <div id="ui-relato"></div>
 </section>
 </div>
-<div class="post-acciones" id="post" hidden><button class="primario" id="revancha">🔁 Revancha</button><a class="boton" href="/amistosos">Salir</a></div>
+<div class="post-acciones" id="post" hidden></div>
 
 <div class="modal" id="modal" hidden><div class="modal-caja momento" id="modal-caja"></div></div>
 <script id="datos" type="application/json">{{ datos|safe }}</script>
-<script>
-(() => {
-  const D = JSON.parse(document.getElementById('datos').textContent);
-  const {esc, api, toast, carta} = FGM;
-  const {pulso, espera} = window.FGM_PULSO;
-  const EMOJIS = ['😂', '🔥', '😱', '👏', '😤', '🫡'];
-  let vistasReac = 0;
-  document.getElementById('reacciones').innerHTML = EMOJIS.map(e => `<button data-e="${e}">${e}</button>`).join('');
-  document.getElementById('reacciones').onclick = async ev => {
-    const b = ev.target.closest('[data-e]'); if (!b) return;
-    lluvia(b.dataset.e, true);
-    try { await api(`/api/vivo/${D.id}/reaccion`, {emoji: b.dataset.e}); } catch {}
-  };
-  function lluvia(emoji, mia) {
-    const el = document.createElement('span');
-    el.className = 'gota' + (mia ? ' mia' : '');
-    el.textContent = emoji;
-    el.style.left = (mia ? 8 + Math.random() * 30 : 62 + Math.random() * 30) + '%';
-    document.getElementById('lluvia').appendChild(el);
-    setTimeout(() => el.remove(), 2200);
-  }
-  const S = window.FGM_SONIDO;
-  const $ = id => document.getElementById(id);
-
-  // guía: qué táctica le gana a cuál
-  if ($('t-guia')) {
-    $('t-guia').innerHTML = FGM.guiaTacticas(D.tacticas, D.vence);
-    $('t-ayuda').onclick = () => { const g = $('t-guia'); g.hidden = !g.hidden; $('t-ayuda').textContent = g.hidden ? '❓ ¿Cuál le gana a cuál?' : '✕ Cerrar guía'; };
-  }
-  // sonido: el celular no deja sonar hasta que tocas algo; el botón avisa y lo activa
-  function pintarSonido() {
-    const b = $('sonido');
-    b.textContent = !S.activo ? '🔇' : S.bloqueado() ? '🔈 Toca para activar el sonido' : '🔊';
-    b.classList.toggle('activo', S.activo && !S.bloqueado());
-    b.classList.toggle('latiendo', S.activo && S.bloqueado());
-  }
-  $('sonido').onclick = () => { if (S.activo && S.bloqueado()) S.silbato(1, 0.15); else S.alternar(); setTimeout(pintarSonido, 150); };
-  addEventListener('pointerdown', () => setTimeout(pintarSonido, 150));
-  pintarSonido();
-  const yo = D.lado;
-  const absoluto = (t, m) => t === 1 ? Math.min(m, 45) : Math.max(m, 46);
-
-  let lineas = [], posesion = [], eventos = 0, version = 0, iMin = 0, iLinea = 0, ahora = [1, 0];
-  let ult = null, final = false, viendoPausa = null, terminado = false, rivalDesde = null;
-  const cuenta = [0, 0];
-
-  // ---------- la cancha (simple: los bloques siguen a la pelota; remates y goles animados)
-  const COLORES = D.colores, rnd = (a, b) => a + Math.random() * (b - a), tope = (v, a, b) => Math.max(a, Math.min(b, v));
-  const pelota = $('pelota'), estadio = $('estadio'), fichas = [[], []];
-  const apellido = n => { const p = String(n).trim().split(/\s+/); return p.length > 1 && p[0].length <= 3 ? p.slice(1).join(' ') : p[p.length - 1]; };
-  function ubicar(f, x, y, ms = 600) {
-    f.x = x; f.y = y; f.el.style.transitionDuration = ms + 'ms';
-    f.el.style.left = x + '%'; f.el.style.top = y + '%';
-  }
-  (D.equipos || []).forEach((e, eq) => {
-    const puestos = D.formaciones[e.formacion], coords = D.coordenadas[e.formacion];
-    if (!puestos || !coords) return;
-    e.jugadores.forEach((nombre, slot) => {
-      const el = document.createElement('div');
-      el.className = 'ficha' + (puestos[slot] === 'GK' ? ' arquero' : '') + (eq === yo ? ' mia' : '');
-      el.style.setProperty('--c', COLORES[eq]);
-      el.innerHTML = `<i></i><span>${esc(apellido(nombre))}</span>`;
-      el.title = nombre;
-      $('fichas').appendChild(el);
-      const [cx, cy] = coords[slot], prof = 7 + (100 - cy) * 0.46;
-      const f = {el, nombre, eq, gk: puestos[slot] === 'GK', linea: FGM.linea(puestos[slot]),
-                 base: eq === 0 ? [prof, cx] : [100 - prof, 100 - cx], activo: true};
-      fichas[eq].push(f); ubicar(f, ...f.base, 0);
-    });
-  });
-  const activas = eq => fichas[eq].filter(f => f.activo);
-  const buscar = (eq, n) => activas(eq).find(f => f.nombre === n);
-  function formar(eqBalon, empuje = 1, ms = 650) {
-    for (const eq of [0, 1]) for (const f of activas(eq)) {
-      const dir = eq === 0 ? 1 : -1;
-      let [x, y] = f.base;
-      if (eqBalon === eq) x += dir * (f.gk ? 5 : (f.linea === 'DEF' ? 11 : 17) * empuje);
-      else if (eqBalon >= 0 && !f.gk) { x -= dir * (f.linea === 'DEL' ? 9 : 3) * empuje; y = 50 + (y - 50) * 0.86; }
-      if (!f.gk && eqBalon >= 0) { x += rnd(-2.5, 2.5); y += rnd(-4, 4); }
-      ubicar(f, tope(x, 3, 97), tope(y, 6, 94), ms);
-    }
-  }
-  function pelotaA(x, y, ms = 350) {
-    pelota.style.transitionDuration = ms + 'ms';
-    pelota.style.left = x + '%'; pelota.style.top = y + '%';
-  }
-  function balonA(f) { if (f) pelotaA(f.x + (f.eq === 0 ? 1.3 : -1.3), f.y + 1.6); }
-  pelotaA(50, 50, 0);
-  // cada minuto: el que tiene la posesión mueve la pelota entre sus jugadores
-  function minutoCancha(eq) {
-    if (!fichas[eq].length) return;
-    formar(eq, rnd(.6, 1.3), 380);
-    const c = activas(eq).filter(f => !f.gk);
-    setTimeout(() => balonA(c[Math.floor(Math.random() * c.length)]), 120);
-  }
-  function anunciar(html, clase, ms = 1800) {
-    const a = $('anuncio'); a.innerHTML = html; a.className = 'anuncio visible ' + (clase || '');
-    clearTimeout(anunciar.t); anunciar.t = setTimeout(() => a.className = 'anuncio', ms);
-  }
-  function cancha(l) {
-    if (!fichas[0].length) return;
-    if (['gol', 'atajada', 'desviado', 'palo'].includes(l.tipo)) {
-      const eqT = l.tipo === 'atajada' ? 1 - l.equipo : l.equipo;
-      const tir = buscar(eqT, l.tipo === 'atajada' ? l.tirador : l.jugador);
-      formar(eqT, 1.35, 300);
-      if (tir) { ubicar(tir, eqT === 0 ? rnd(78, 86) : rnd(14, 22), rnd(35, 65), 300); setTimeout(() => balonA(tir), 150); }
-      let ty = l.tipo === 'desviado' ? (Math.random() < .5 ? rnd(32, 41) : rnd(59, 68)) : l.tipo === 'palo' ? (Math.random() < .5 ? 44.2 : 55.8) : rnd(46, 54);
-      setTimeout(() => {
-        pelotaA(l.tipo === 'atajada' ? (eqT === 0 ? 96 : 4) : (eqT === 0 ? 99.3 : 0.7), ty, 300);
-        if (l.tipo === 'gol') {
-          FGM.reanimar(estadio, 'sacude'); FGM.reanimar($(eqT === 0 ? 'arco-der' : 'arco-izq'), 'red');
-          anunciar(`<b>¡GOL!</b><span>${esc(l.jugador || '')}</span>`, 'gol', 2200);
-          setTimeout(() => { formar(-1, 1, 800); pelotaA(50, 50, 600); }, 1600);
-        }
-      }, 420);
-    } else if (l.tipo === 'cambio') {
-      const f = buscar(l.equipo, l.sale);
-      if (f) { f.nombre = l.jugador; f.el.title = l.jugador; f.el.querySelector('span').textContent = apellido(l.jugador); }
-    } else if (l.tipo === 'roja') {
-      const f = buscar(l.equipo, l.jugador);
-      if (f) { f.activo = false; f.el.classList.add('fuera'); }
-    } else if (l.tipo === 'amarilla') {
-      const f = buscar(l.equipo, l.jugador);
-      if (f) f.el.classList.add('amonestado');
-    }
-  }
-
-  function escribir(l) {
-    cancha(l);
-    const li = document.createElement('li');
-    li.className = 'linea ' + l.tipo + (l.equipo === yo ? ' propio' : '');
-    const texto = esc(l.texto).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-    li.innerHTML = (l.minuto ? `<b>${esc(l.minuto)}</b>` : '') + `<span>${texto}</span>`;
-    $('relato').prepend(li);
-    const a = $('relato-actual');
-    a.className = 'relato-actual cambia ' + l.tipo + (l.equipo === yo ? ' propio' : '');
-    a.innerHTML = li.innerHTML;
-    if (l.tipo === 'gol') { S.gol(l.equipo === yo); if (l.equipo === yo) FGM.confeti(70); FGM.reanimar($('g' + l.equipo), 'golazo'); if (l.marcador) { $('g0').textContent = l.marcador[0]; $('g1').textContent = l.marcador[1]; } }
-    else if (['atajada', 'palo', 'desviado'].includes(l.tipo)) S.uy();
-    if (l.tipo === 'tactica' && l.equipo !== yo) rivalDesde = absoluto(l.tiempo, l.min);
-  }
-
-  // tácticas: las dos se cambian en vivo; las del rival se "leen" unos minutos después
-  function pintarTacticas() {
-    if (!ult) return;
-    const pierdeCon = k => Object.keys(D.vence).find(x => D.vence[x] === k);
-    $('t-chips').innerHTML = Object.entries(D.tacticas).map(([k, t]) => {
-      const vence = D.vence[k] && D.tacticas[D.vence[k]], pierde = pierdeCon(k) && D.tacticas[pierdeCon(k)];
-      const ayuda = t.ayuda + (vence ? `\nLe gana a ${vence.nombre} · pierde con ${pierde.nombre}.` : '');
-      return `<button class="t-chip${ult.tactica === k ? ' activo' : ''}" data-t="${k}" title="${esc(ayuda)}" ${final || ult.tactica === k ? 'disabled' : ''}>
-        <span>${t.ico}</span>${esc(t.nombre)}${vence ? `<small class="t-vence">› ${vence.ico}</small>` : ''}</button>`;
-    }).join('');
-    const leyendo = rivalDesde != null && absoluto(...ahora) - rivalDesde < D.minutos_lectura;
-    const r = D.tacticas[ult.tactica_rival];
-    const t = $('t-rival');
-    t.classList.toggle('leyendo', leyendo);
-    t.textContent = leyendo ? 'Rival: 🔎 cambió algo… leyéndolo' : r && ult.tactica_rival !== 'normal'
-      ? `Rival: ${r.ico} ${r.nombre}${D.vence[ult.tactica] === ult.tactica_rival ? ' · ¡le ganas!' : D.vence[ult.tactica_rival] === ult.tactica ? ' · te está ganando' : ''}` : '';
-  }
-  $('t-chips').onclick = async e => {
-    const b = e.target.closest('[data-t]'); if (!b || b.disabled) return;
-    try { await api(`/api/vivo/${D.id}/tactica`, {valor: b.dataset.t}); toast(`🧠 ${D.tacticas[b.dataset.t].nombre}`); }
-    catch (er) { toast(er.message, {error: true}); }
-  };
-
-  // ---------- pedir el estado al servidor
-  async function pedir() {
-    try {
-      const r = await (await fetch(`/api/vivo/${D.id}/estado?desde=${eventos}&t=${ahora[0]}&m=${ahora[1]}`)).json();
-      if (r.error) { toast(r.error, {error: true}); return; }
-      if (r.version !== version) {      // alguien cambió la táctica: desde ahí el partido es otro
-        version = r.version;
-        const corte = ahora;
-        lineas = lineas.filter((l, i) => i < iLinea);
-        iLinea = lineas.length;
-        eventos = Math.min(eventos, r.corte);
-        ult = r; return pedir();
-      }
-      lineas.push(...r.lineas);
-      eventos = r.eventos;
-      posesion = r.posesion;
-      final = r.final;
-      ult = r;
-      $('conexion').textContent = r.rival_conectado ? '· rival conectado 🟢' : '· rival desconectado 🔴';
-      $('apuesta').textContent = r.apuesta ? `· 💰 ${(2 * r.apuesta).toLocaleString('es-CL')} en juego` : '';
-      for (const x of r.reacciones || []) if (x.n > vistasReac) { vistasReac = x.n; lluvia(x.emoji, false); }
-      if (r.revancha) {
-        if (r.revancha.partido) location.href = `/vivo/${r.revancha.partido}`;
-        const b = $('revancha');
-        if (r.revancha.yo) { b.disabled = true; b.textContent = r.revancha.rival ? '🔁 Armando…' : '⏳ Esperando que acepte…'; }
-        else if (r.revancha.rival) { b.textContent = '🔁 ¡Te pide revancha! Aceptar'; b.classList.add('latiendo'); }
-      }
-      pintarTacticas();
-    } catch {}
-  }
-
-  // ---------- reproducir minuto a minuto (misma velocidad para los dos)
-  async function reproducir() {
-    while (true) {
-      try { if (await paso()) return; }
-      catch (e) {   // corte de red o error raro: se cierra la jugada abierta y se reintenta (antes quedaba pegado)
-        modal.hidden = true;
-        $('conexion').textContent = '· reconectando… 🟡';
-        await espera(1500);
-      }
-    }
-  }
-  // un paso de la reproducción; devuelve true cuando el partido terminó
-  async function paso() {
-    {
-      if (iMin < posesion.length) {
-        const [t, m, eq] = posesion[iMin++];
-        ahora = [t, m];
-        cuenta[eq]++;
-        minutoCancha(eq);
-        $('reloj').textContent = m > 45 && t === 1 ? `45+${m - 45}'` : m > 90 ? `90+${m - 90}'` : `${m}'`;
-        $('periodo').textContent = t === 1 ? '1T' : '2T';
-        const pct = Math.round(100 * cuenta[yo] / (cuenta[0] + cuenta[1]));
-        $('pos0').textContent = (yo === 0 ? pct : 100 - pct) + '%'; $('pos1').textContent = (yo === 0 ? 100 - pct : pct) + '%';
-        $('pbarra').style.width = (yo === 0 ? pct : 100 - pct) + '%';
-        while (iLinea < lineas.length && (lineas[iLinea].tiempo < t || (lineas[iLinea].tiempo === t && lineas[iLinea].min <= m))) {
-          const l = lineas[iLinea++];
-          if (!['resumen'].includes(l.tipo)) escribir(l);
-        }
-        if (rivalDesde != null) pintarTacticas();
-        await espera(420);
-        return false;
-      }
-      // al día con lo simulado: ¿pausa, final o seguir pidiendo?
-      while (iLinea < lineas.length) escribir(lineas[iLinea++]);
-      if (ult && ult.pausa) { await atenderPausa(ult.pausa); await pedir(); return false; }
-      if (final) { terminar(); return true; }
-      await espera(900);
-      await pedir();
-      return false;
-    }
-  }
-
-  // ---------- jugada clave: eliges a ciegas, esperas al rival y pulso
-  const NOMBRE = {tirar: '🥅 Rematar', pasar: '🤝 Pasarla', gambetear: '🪄 Encarar', barrer: '🦵 Ir al piso',
-    achicar: '🧤 Salir a achicar', cerrar: '🧱 Cerrar el ángulo', izq: '↖ Izquierda', centro: '⬆ Al medio', der: '↗ Derecha'};
-  const modal = $('modal'), caja = $('modal-caja');
-  async function esperarHasta(cond) {
-    while (true) {
-      await pedir();
-      const p = ult && ult.pausa;
-      if (!p || cond(p)) return p;
-      await espera(400);
-    }
-  }
-  async function atenderPausa(p) {
-    modal.hidden = false;
-    const ataco = p.rol === 'ataque', penal = p.tipo === 'penal';
-    const clase = p.clase || 'jugada';
-    const titulo = penal ? (ataco ? `🥅 ¡Penal a favor! Patea ${esc(p.pateador)}` : `🥅 ¡Penal en contra! Ataja ${esc(p.arquero)}`)
-      : clase === 'corner' ? (ataco ? `🚩 ¡Córner a favor! Va ${esc(p.jugador)}` : `🚩 Córner en contra: va ${esc(p.jugador)}`)
-      : clase === 'tiro_libre' ? (ataco ? `🎯 ¡Tiro libre a favor! Patea ${esc(p.jugador)}` : `🎯 Tiro libre en contra: patea ${esc(p.jugador)}`)
-      : ataco ? `🎯 ¡Jugada clave! ${esc(p.jugador)} queda de frente al arco` : `🚨 ¡Te atacan! ${esc(p.jugador)} se escapa`;
-    const opciones = penal
-      ? ['izq', 'centro', 'der'].map(l => ({clave: l, titulo: NOMBRE[l], detalle: ''}))
-      : p.opciones;
-    caja.className = 'modal-caja momento' + (ataco ? '' : ' defensa-caja');
-    caja.innerHTML = `<h2>${titulo} <small class="tenue">${p.minuto}'</small></h2>
-      <p class="tenue">${ataco ? 'Tu amigo elige cómo defender' : 'Tu amigo elige cómo atacar'}, sin ver lo tuyo. Después: pulso.</p>
-      ${p.decisivo ? '<p class="pu-decisivo">🔥 MOMENTO DECISIVO</p>' : ''}
-      <div class="m-opciones">${opciones.map(o => `<button class="m-op" data-c="${o.clave}">${o.ico ? `<span class="m-ico">${o.ico}</span>` : ''}<b>${esc(o.titulo)}${o.stat ? ` <small class="m-stat">${esc(o.stat[0])} ${o.stat[1]}</small>` : ''}</b><small>${esc(o.detalle || '')}</small>${o.leida ? '<em class="m-leida">👀 Ya la usaste</em>' : ''}</button>`).join('')}</div>
-      <div class="m-ejecucion"></div>`;
-    S.silbato(1, 0.2);
-    let elegida = p.mi_eleccion;
-    if (!elegida) {
-      elegida = await new Promise(ok => {
-        const t = setTimeout(() => ok(penal ? (ataco ? 'izq' : 'centro') : opciones[ataco ? 0 : opciones.length - 1].clave), 14000);
-        caja.querySelectorAll('.m-op').forEach(b => b.onclick = () => { clearTimeout(t); ok(b.dataset.c); });
-      });
-      await api(`/api/vivo/${D.id}/elegir`, {eleccion: elegida});
-    }
-    caja.classList.add('revelado');
-    caja.querySelectorAll('.m-op').forEach(x => x.classList.toggle('elegida', x.dataset.c === elegida));
-    const cont = caja.querySelector('.m-ejecucion');
-    cont.innerHTML = '<p class="m-revela">⏳ Esperando que tu amigo elija…</p>';
-    const q = await esperarHasta(x => x.prep);
-    if (!q || q.minuto !== p.minuto) { modal.hidden = true; return; }
-    const prep = q.prep;
-    const mia = ataco ? prep.nombre_ataque : prep.nombre_defensa, suya = ataco ? prep.nombre_defensa : prep.nombre_ataque;
-    cont.innerHTML = `<p class="m-revela">Tú: <b>${esc(mia || NOMBRE[elegida] || elegida)}</b> · Rival: <b>${esc(suya || '')}</b></p><div class="m-pulso"></div>`;
-    if (prep.pulso === false) {
-      cont.insertAdjacentHTML('beforeend', `<p class="pu-fin ${ataco ? 'ok' : 'mal'}">${ataco ? '¡Lo mandaste al otro lado!' : 'Te tiraste al otro lado…'}</p>`);
-      await espera(1300);
-      modal.hidden = true; return;
-    }
-    await espera(600);
-    await pulso(cont.querySelector('.m-pulso'), prep, async (r, mia) => {
-      await api(`/api/vivo/${D.id}/toque`, {ronda: r, precision: mia});
-      const x = await esperarHasta(z => !z.prep || (z.toques_rival || []).length > r);
-      return x && x.toques_rival && x.toques_rival.length > r ? x.toques_rival[r] : 0.1;
-    }, {esperando: '⏳ Esperando el toque de tu amigo…'});
-    modal.hidden = true;
-  }
-
-  function terminar() {
-    if (terminado) return;
-    terminado = true;
-    S.silbato(3);
-    const mio = ult.marcador[yo], suyo = ult.marcador[1 - yo];
-    $('relato-actual').innerHTML = `<b>FIN</b><span>${mio > suyo ? '¡Ganaste!' : mio === suyo ? 'Empate' : 'Perdiste'} ${ult.marcador[0]} - ${ult.marcador[1]}</span>`;
-    if (mio > suyo) FGM.confeti(120);
-    $('tacticas').hidden = true;
-    $('post').hidden = false;
-    $('revancha').onclick = async () => {
-      try { const r = await api(`/api/vivo/${D.id}/revancha`, {}); if (r.partido) location.href = `/vivo/${r.partido}`; } catch (e) { toast(e.message, {error: true}); }
-      $('revancha').disabled = true;
-    };
-    // sigue preguntando: por si el rival pide revancha
-    setInterval(pedir, 1500);
-  }
-
-  (async () => { await pedir(); reproducir(); })();
-})();
-</script>
+<script type="module" src="/static/partido/vivo.js?v={{ version }}"></script>
+<script src="/static/marcador.js?v={{ version }}"></script>
+<script src="/static/vs.js?v={{ version }}"></script>
 {% endblock %}

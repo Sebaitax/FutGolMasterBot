@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="arena-hero arena-{{ cancha.tema }} buscando">
+  <div class="bus-radar"><span></span><span></span><span></span><b>{{ insignia(cancha) }}</b></div>
+  <h1 id="bus-titulo">Buscando rival…</h1>
+  <p id="bus-texto">Buscando un rival con copas parecidas en la {{ cancha.nombre }}.</p>
+  <p class="bus-cuenta" id="bus-cuenta">{{ ico('timer') }} <b id="bus-seg">0</b> s</p>
+  <a class="boton" id="bus-cancelar" href="/">Cancelar</a>
+</section>
+<form method="post" action="/escalera/jugar" id="bus-bot" hidden><input name="modo" value="vivo"></form>
+<style>
+  .buscando { text-align: center; padding: 28px 18px; }
+  .bus-radar { position: relative; width: 120px; height: 120px; margin: 4px auto 14px; display: grid; place-items: center; }
+  .bus-radar b { font-size: 3rem; position: relative; z-index: 1; }
+  .bus-radar span { position: absolute; inset: 0; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .7); animation: radar 2.4s ease-out infinite; }
+  .bus-radar span:nth-child(2) { animation-delay: .8s; }
+  .bus-radar span:nth-child(3) { animation-delay: 1.6s; }
+  @keyframes radar { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.25); opacity: 0; } }
+  .bus-cuenta { font-size: 1.4rem; margin: 10px 0; }
+  .buscando .boton { background: rgba(255, 255, 255, .15); color: #fff; border-color: rgba(255, 255, 255, .35); }
+  .buscando.encontrado .bus-radar span { animation: none; opacity: 0; }
+</style>
+<script>
+(() => {
+  const {api, toast} = FGM;
+  const $ = id => document.getElementById(id);
+  const limite = {{ segundos }} * 1000, t0 = Date.now();
+  let activo = true;
+  async function buscar() {
+    while (activo) {
+      try {
+        const r = await api('/api/escalera/buscar', {});
+        if (r.partido) {   // ¡rival online!
+          activo = false;
+          document.querySelector('.buscando').classList.add('encontrado');
+          $('bus-titulo').textContent = '¡Rival encontrado!';
+          $('bus-texto').textContent = '¡A la cancha!';
+          setTimeout(() => location.href = `/vivo/${r.partido}`, 700);
+          return;
+        }
+      } catch (e) { toast(e.message, {error: true}); activo = false; return; }
+      const resta = Math.max(0, limite - (Date.now() - t0));
+      $('bus-seg').textContent = Math.floor((Date.now() - t0) / 1000);   // cuenta hacia arriba, como una búsqueda real
+      if (resta <= 0) {   // nadie online: contra un bot de tu cancha
+        activo = false;
+        try {   // si justo te emparejaron, a ese partido (no se deja solo al otro)
+          const c = await api('/api/escalera/cancelar', {motivo: 'tiempo'});
+          if (c.partido) { location.href = `/vivo/${c.partido}`; return; }
+        } catch {}
+        document.querySelector('.buscando').classList.add('encontrado');
+        $('bus-titulo').textContent = '¡Rival encontrado!';
+        $('bus-texto').textContent = '¡A la cancha!';
+        setTimeout(() => $('bus-bot').submit(), 600);
+        return;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+  $('bus-cancelar').onclick = async e => {
+    e.preventDefault(); activo = false;
+    try { await api('/api/escalera/cancelar', {motivo: 'cancelo'}); } catch {}
+    location.href = '/';
+  };
+  addEventListener('pagehide', () => { if (activo) navigator.sendBeacon('/api/escalera/cancelar'); });
+  buscar();
+})();
+</script>
+{% endblock %}

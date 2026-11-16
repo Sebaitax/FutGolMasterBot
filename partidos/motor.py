@@ -35,16 +35,39 @@ FORMACIONES = {
     "4-2-3-1": ["GK", "LB", "CB", "CB", "RB", "CDM", "CDM", "LM", "CAM", "RM", "ST"],
     "3-5-2": ["GK", "CB", "CB", "CB", "LWB", "CM", "CDM", "CM", "RWB", "ST", "ST"],
     "5-3-2": ["GK", "LWB", "CB", "CB", "CB", "RWB", "CM", "CM", "CM", "ST", "ST"],
+    "4-1-4-1": ["GK", "LB", "CB", "CB", "RB", "CDM", "LM", "CM", "CM", "RM", "ST"],
+    "3-4-3": ["GK", "CB", "CB", "CB", "LM", "CM", "CM", "RM", "LW", "ST", "RW"],
+    "4-3-1-2": ["GK", "LB", "CB", "CB", "RB", "CM", "CDM", "CM", "CAM", "ST", "ST"],
+    "4-5-1": ["GK", "LB", "CB", "CB", "RB", "LM", "CM", "CDM", "CM", "RM", "ST"],
+    "5-4-1": ["GK", "LWB", "CB", "CB", "CB", "RWB", "LM", "CM", "CM", "RM", "ST"],
 }
+
+# Cada formación le gana a otras por lógica de fútbol (no se le explica al jugador: se descubre jugando).
+# Quien gana el cruce llega un poco más al arco; quien lo pierde, un poco menos.
+VENCE_FORMACION = {
+    "4-3-3": {"3-5-2", "4-5-1"},       # los extremos atacan la espalda de los carrileros
+    "4-4-2": {"5-3-2", "4-3-1-2"},     # el ancho de los volantes contra equipos angostos
+    "4-2-3-1": {"4-4-2", "4-1-4-1"},   # el enganche entre líneas que nadie marca
+    "3-5-2": {"4-4-2", "4-2-3-1"},     # superioridad en el medio (cinco contra cuatro o tres)
+    "5-3-2": {"3-4-3", "5-4-1"},       # cinco atrás contra tres delanteros; dos puntas fijan a los centrales del 5-4-1
+    "4-1-4-1": {"4-3-3", "4-3-1-2"},   # el volante central tapa al enganche y al falso nueve
+    "3-4-3": {"4-2-3-1", "5-4-1"},     # tres arriba presionan la salida de los dos volantes
+    "4-3-1-2": {"5-3-2", "4-5-1"},     # dos puntas y enganche contra bloques que esperan
+    "4-5-1": {"3-4-3", "3-5-2"},       # el medio poblado gana la pelota a los de tres atrás
+    "5-4-1": {"4-1-4-1", "4-3-3"},     # bloque bajo y contra rápida contra los que van al ataque
+}
+VENTAJA_FORMACION = 1.10
+DESVENTAJA_FORMACION = 0.93
 
 BANDAS = {"LB", "RB", "LWB", "RWB", "LM", "RM", "LW", "RW"}
 ESTADOS_NO_DISPONIBLES = {"lesionado", "suspendido"}
 
-# Mentalidad: multiplica el ataque propio y la defensa propia (más ataque = más espacios atrás)
+# Mentalidad: desactivada (no aportaba; las formaciones y las tácticas ya cubren ese papel).
+# Se mantienen los nombres para que partidas y alineaciones guardadas sigan cargando.
 MENTALIDADES = {
-    "defensiva": (0.88, 1.10),
+    "defensiva": (1.0, 1.0),
     "equilibrada": (1.0, 1.0),
-    "ofensiva": (1.12, 0.91),
+    "ofensiva": (1.0, 1.0),
 }
 MAX_CAMBIOS = 5
 
@@ -64,7 +87,7 @@ TACTICAS = {
 }
 PAUSAS_TACTICAS = 2      # pausas para hacer cambios cuando quieras (además del entretiempo)
 ESPERA_TACTICA = 10      # minutos entre cambios de táctica
-MAX_MOMENTOS = 4         # momentos clave por partido (tú decides la jugada)
+MAX_MOMENTOS = 2         # momentos clave por partido (tú decides la jugada); pocos: el partido dura ~3 min
 PROB_MOMENTO = 0.45      # de cada ocasión tuya, cuántas se vuelven momento clave
 SEPARACION_MOMENTOS = 8  # minutos mínimos entre momentos clave
 # calidad extra de la ocasión según lo que elijas en un momento clave
@@ -128,7 +151,7 @@ MAX_PARADAS_PVP = 1      # en vivo entre amigos: córners/tiros libres jugados c
 PROB_DUELO_PVP = 0.33
 
 # --- pelota parada: córners y tiros libres también son jugadas clave ----------------
-MAX_PARADAS = 3          # por partido (de los dos equipos)
+MAX_PARADAS = 1          # por partido (de los dos equipos)
 PROB_CORNER = 0.3        # de cada córner, cuántos se juegan como jugada clave
 PROB_TIRO_LIBRE = 0.14   # de cada falta a favor (cerca del área), cuántas se juegan
 
@@ -208,7 +231,7 @@ RESULTADO_PARADA = {
     "tiro_libre": {"directo": (("tirador", 1.25, "lejano"), "atajada"), "centro": (("receptor", 1.5, "centro_cabeza"), None),
                    "ensayada": (("receptor", 1.35, "pase_filtrado"), None)},
 }
-MAX_DEFENSAS = 3             # momentos defensivos por partido (te atacan y decides)
+MAX_DEFENSAS = 1             # momentos defensivos por partido (te atacan y decides)
 PROB_DEFENSA = 0.3
 
 
@@ -537,7 +560,7 @@ class Simulacion:
         ahora = self._ahora()
         decisivo = self.decisivo()
         extra = FACTOR_DECISIVO if decisivo else 1.0
-        tope = (1 if self.duelos else 2) if decisivo else 0
+        tope = 1 if decisivo else 0   # en el cierre apretado puede haber una jugada clave más
         if self.duelos:   # entre amigos: cualquiera de los dos puede tener la jugada clave
             if (self._n_momentos < MAX_DUELOS_PVP + tope and ahora - self._ultimo_momento >= SEPARACION_MOMENTOS
                     and self.rng.random() < PROB_DUELO_PVP * extra):
@@ -794,13 +817,15 @@ class Simulacion:
         self.posesion_min.append((self.tiempo, self.minuto, eq, pg, pe))
 
     def duelo_tactico(self, eq: int) -> float:
-        """Multiplicador de llegadas de `eq` según las tácticas de ambos (contras)."""
+        """Multiplicador de llegadas de `eq` según las tácticas de ambos (contras) y el cruce de formaciones."""
         mia, suya = self.equipos[eq].tactica, self.equipos[1 - eq].tactica
-        if VENCE.get(mia) == suya:
-            return VENTAJA_TACTICA
-        if VENCE.get(suya) == mia:
-            return DESVENTAJA_TACTICA
-        return 1.0
+        f = VENTAJA_TACTICA if VENCE.get(mia) == suya else DESVENTAJA_TACTICA if VENCE.get(suya) == mia else 1.0
+        fm, fs = self.equipos[eq].formacion, self.equipos[1 - eq].formacion
+        if fs in VENCE_FORMACION.get(fm, ()):
+            f *= VENTAJA_FORMACION
+        elif fm in VENCE_FORMACION.get(fs, ()):
+            f *= DESVENTAJA_FORMACION
+        return f
 
     def _ahora(self) -> int:
         return (self.tiempo - 1) * 50 + self.minuto
@@ -1022,7 +1047,7 @@ class Simulacion:
             return 0.7 * j.stat("PHY") + 0.3 * j.stat("SHO" if j.linea != "DEF" else "DEF")
         return j.stat(clave)
 
-    ETIQUETA = {"SHO": "TIR", "PAS": "PAS", "DRI": "REG", "DEF": "DEF", "GK": "🧤", "CAB": "CAB"}
+    ETIQUETA = {"SHO": "TIR", "PAS": "PAS", "DRI": "REG", "DEF": "DEF", "GK": "ARQ", "CAB": "CAB"}
 
     def _texto(self, plantilla: str, a: dict) -> str:
         nombres = {k: (a[k].nombre if a.get(k) else "un compañero") for k in ("tirador", "receptor", "defensor", "arquero")}
@@ -1051,7 +1076,8 @@ class Simulacion:
 
     def _ficha_tirador(self, t: EnCancha) -> dict:
         c = t.jugador.carta
-        return {"id": t.jugador.id, "nombre": t.nombre, "pos": c.posicion, "ovr": c.ovr, "nivel": c.nivel, "club": c.club}
+        return {"id": t.jugador.id, "nombre": t.nombre, "completo": c.nombre, "pos": c.posicion, "ovr": c.ovr,
+                "nivel": c.nivel, "club": c.club, "nacion": c.nacion, "mejora": getattr(t.jugador, "nivel_mejora", 1) or 1}
 
     def opciones_pausa(self, pausa: dict, rol: str) -> dict:
         """Todo lo que ve quien decide: su jugador, sus opciones y (si ya lo leyó) cómo está parado el rival."""
@@ -1230,41 +1256,29 @@ class Simulacion:
         lp = lado_pateador if lado_pateador in LADOS_PENAL else "izq"
         la = lado_arquero if lado_arquero in LADOS_PENAL else "centro"
         sho, gk = pateador.stat("SHO"), (arquero.stat("OVR") if arquero else 20)
-        nombre_lado = {"izq": "↖ Izquierda", "centro": "⬆ Al medio", "der": "↗ Derecha"}
-        datos = {"clase": "penal", "lado": lp, "adivina": la, "ataca": eq, "pulso": lp == la,
+        nombre_lado = {"izq": "Izquierda", "centro": "Al medio", "der": "Derecha"}
+        # penal simple, sin minijuego: si el arquero no adivina el lado es gol; si lo adivina, la ataja
+        datos = {"clase": "penal", "lado": lp, "adivina": la, "ataca": eq, "pulso": False, "gol": lp != la,
                  "nombre_ataque": nombre_lado[lp], "nombre_defensa": nombre_lado[la],
                  "gesto_ataque": "apuntar", "gesto_defensa": "reaccion", "decisivo": bool(pausa.get("decisivo")),
                  "atacante": {"nombre": pateador.nombre, "stat": "TIR", "valor": round(sho)},
-                 "defensor": {"nombre": arquero.nombre if arquero else "", "stat": "🧤", "valor": round(gk)},
+                 "defensor": {"nombre": arquero.nombre if arquero else "", "stat": "ARQ", "valor": round(gk)},
                  "rondas": RONDAS_PULSO, "empuje": round(EMPUJE_PULSO * (EMPUJE_DECISIVO if pausa.get("decisivo") else 1), 3)}
-        if lp == la:   # el arquero fue al lado correcto: pulso (al medio con el arquero quieto, casi perdido)
-            inicio = 0.3 if lp == "centro" else sho / (sho + gk) - 0.05
-            datos.update(inicio=round(min(0.75, max(0.2, inicio)), 3), zona_ataque=zona(sho, gk - 5), zona_defensa=zona(gk, sho - 5))
         return datos
 
     def _resolver_penal(self, pausa: dict, decision: dict):
         _, eq, pateador = self._pendientes[pausa["ref"]]
+        # penal simple: solo cuentan los lados (no hay pulso)
         if self.duelos:
             lp, la = decision.get("lado_pateador"), decision.get("lado_arquero")
-            pa, pd = precisiones(decision.get("prec_ataque")), precisiones(decision.get("prec_defensa"))
         elif eq == self.interactivo:
             lp, la = decision.get("lado"), self.lado_ia(pausa, "arquero")
-            pa, pd = precisiones(decision.get("precisiones")), None
         else:
             lp, la = self.lado_ia(pausa, "pateador"), decision.get("lado")
-            pa, pd = None, precisiones(decision.get("precisiones"))
         prep = self.preparar_penal(pausa, lp, la)
         self._pendientes.pop(pausa["ref"])
-        if prep["pulso"]:
-            if pa is None:
-                pa = self.precisiones_ia(pausa, "ataque", prep["atacante"]["valor"])
-            if pd is None:
-                pd = self.precisiones_ia(pausa, "defensa", prep["defensor"]["valor"])
-            barra = self.final_pulso(prep["inicio"], pa, pd, prep["empuje"])
-            resultado = "gol" if barra >= 0.5 else "atajada"
-        else:
-            barra = 1.0
-            resultado = "gol"
+        resultado = "gol" if prep["gol"] else "atajada"
+        barra = 1.0 if prep["gol"] else 0.0
         self._registrar_tiro(eq, pateador, None, resultado, penal=True, jugada="penal",
                              extra={"lado": prep["lado"], "adivina": prep["adivina"]})
         self.momentos.append({"eleccion": "penal", "ataca": eq, "gol": resultado == "gol", "barra": round(barra, 2),

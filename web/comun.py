@@ -116,6 +116,10 @@ class _VersionEstaticos:
 
 plantillas.env.globals["version"] = _VersionEstaticos()
 plantillas.env.globals["posiciones_json"] = json.dumps(POSICIONES_ES)
+from web import iconos as _iconos  # noqa: E402
+plantillas.env.globals.update(ico=_iconos.ico, bandera=_iconos.bandera, insignia=_iconos.insignia, emoji_iconos_json=_iconos.EMOJI_JSON,
+                              sprite_iconos=_iconos.SPRITE)
+plantillas.env.filters.update(iconos=_iconos.con_iconos, bandera=_iconos.bandera)
 
 
 COOKIE_PARTIDA = "fgm_partida"
@@ -158,7 +162,7 @@ def jugadores_online(yo: str) -> list[dict]:
             uid = p.usuario_id
             e = p.equipo(uid)
             salida.append({"pid": pid, "nombre": e["nombre"], "estadio": e["estadio"], "escudo": e["escudo"] or "",
-                           "fuerza": round(p.fuerza_equipo(uid), 1), "division": p.nombre_division(p.division_de(uid)),
+                           "fuerza": round(p.fuerza_equipo(uid), 1), "division": p.info_cancha()["nombre"],
                            "activo": ruta.stat().st_mtime})
         except Exception:
             continue

@@ -157,6 +157,38 @@ def resumen(horas: float = 24, pid: str | None = None, nivel: str | None = None,
     return {"eventos": eventos, "jugadores": jugadores, "errores": errores, "lentas": lentas, "totales": totales}
 
 
+def metricas(horas: float = 24, ruta: Path = RUTA) -> dict:
+    """Números clave del juego (eventos tipo 'metrica' + actividad), para el panel de administración."""
+    if not ruta.exists():
+        return {}
+    con = conectar(ruta)
+    desde = time.time() - horas * 3600
+    uno = lambda sql, *a: con.execute(sql, (desde, *a)).fetchone()[0]
+    m = {
+        "activos": uno("SELECT COUNT(DISTINCT pid) FROM eventos WHERE ts >= ? AND pid IS NOT NULL AND pid != ''"),
+        "cuentas_nuevas": uno("SELECT COUNT(*) FROM eventos WHERE ts >= ? AND tipo = 'cuenta' AND mensaje LIKE 'cuenta nueva%'"),
+        "clubes_nuevos": uno("SELECT COUNT(*) FROM eventos WHERE ts >= ? AND tipo = 'metrica' AND mensaje = 'club_creado'"),
+        "errores": uno("SELECT COUNT(*) FROM eventos WHERE ts >= ? AND nivel = 'error'"),
+        "errores_js": uno("SELECT COUNT(*) FROM eventos WHERE ts >= ? AND tipo = 'js' AND nivel = 'error'"),
+        "pegados": uno("SELECT COUNT(*) FROM eventos WHERE ts >= ? AND tipo = 'js' AND mensaje LIKE 'posible pegado%'"),
+        "reconexiones": uno("SELECT COUNT(*) FROM eventos WHERE ts >= ? AND tipo = 'js' AND mensaje LIKE 'reconect%'"),
+        "trampas": uno("SELECT COUNT(*) FROM eventos WHERE ts >= ? AND tipo = 'trampa'"),
+    }
+    m["partidos"] = [dict(r) for r in con.execute(
+        "SELECT json_extract(detalle, '$.modo') modo, COUNT(*) n, CAST(AVG(json_extract(detalle, '$.duracion')) AS INT) duracion,"
+        " SUM(json_extract(detalle, '$.resultado') = 'victoria') victorias, SUM(json_extract(detalle, '$.resultado') = 'derrota') derrotas"
+        " FROM eventos WHERE ts >= ? AND tipo = 'metrica' AND mensaje = 'partido_fin' GROUP BY modo", (desde,))]
+    m["busquedas"] = [dict(r) for r in con.execute(
+        "SELECT json_extract(detalle, '$.resultado') resultado, COUNT(*) n, ROUND(AVG(json_extract(detalle, '$.espera')), 1) espera"
+        " FROM eventos WHERE ts >= ? AND tipo = 'metrica' AND mensaje = 'busqueda' GROUP BY resultado", (desde,))]
+    m["sobres"] = dict(con.execute(
+        "SELECT COUNT(*) n, COALESCE(SUM(json_extract(detalle, '$.calidades.estrella')), 0) estrellas,"
+        " COALESCE(SUM(json_extract(detalle, '$.calidades.crack')), 0) cracks"
+        " FROM eventos WHERE ts >= ? AND tipo = 'metrica' AND mensaje = 'sobre'", (desde,)).fetchone())
+    con.close()
+    return m
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="Resumen de la bitácora del servidor")

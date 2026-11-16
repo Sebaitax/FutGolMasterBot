@@ -10,7 +10,7 @@
     <div class="crear-paises">
       {% for p in paises %}
       <label class="crear-pais"><input type="radio" name="pais" value="{{ p.clave }}" {{ 'checked' if loop.first }}>
-        <span><i>{{ p.bandera }}</i>{{ p.nombre }}</span></label>
+        <span><i>{{ p.bandera|bandera }}</i>{{ p.nombre }}</span></label>
       {% endfor %}
     </div>
     <button class="primario grande-btn">Crear club</button>

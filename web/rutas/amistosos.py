@@ -55,7 +55,7 @@ def ver_amigo(request: Request, amigo: str, p: Partida = P):
         stats = otro.estadisticas_club()["record"]["liga"]
         datos = {
             "pid": amigo, "nombre": e["nombre"], "estadio": e["estadio"], "eslogan": e["eslogan"] or "",
-            "division": otro.nombre_division(otro.division_de(uid)), "fuerza": round(otro.fuerza_equipo(uid), 1),
+            "division": otro.info_cancha()["nombre"], "fuerza": round(otro.fuerza_equipo(uid), 1),
             "quimica": q["equipo"], "formacion": once.formacion, "mentalidad": once.mentalidad, "record": stats,
             "once": json.dumps([_carta_json(j.carta, puesto=pu, mejora=j.nivel_mejora)
                                 for j, pu in zip(once.titulares, FORMACIONES[once.formacion])], ensure_ascii=False),

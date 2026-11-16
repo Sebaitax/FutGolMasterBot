@@ -38,10 +38,16 @@ def api_sobre(clave: str, p: Partida = P):
         r = p.abrir_sobre_completo(clave)
     except ErrorJuego as e:
         return error_json(e)
+    calidades: dict[str, int] = {}
+    for f in r["cartas"]:
+        k = p.calidades.get(f.pid, "normal")
+        calidades[k] = calidades.get(k, 0) + 1
+    bitacora.anotar("metrica", "sobre", detalle={"origen": "tienda", "tipo": clave, "calidades": calidades})
     bitacora.anotar("juego", f"Sobre {clave}", detalle={
         "cartas": [f"{f.carta.nombre} {f.carta.ovr}" for f in r["cartas"]], "objetos": [o["nombre"] for o in r["objetos"]],
         "monedas": p.monedas})
-    return {"cartas": [_ficha_json(f) for f in r["cartas"]], "objetos": [objeto_json(o) for o in r["objetos"]],
+    return {"cartas": [{**_ficha_json(f), "calidad": p.calidades.get(f.pid, "normal")} for f in r["cartas"]],
+            "objetos": [objeto_json(o) for o in r["objetos"]],
             "monedas": p.monedas}
 
 

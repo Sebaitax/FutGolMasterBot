@@ -42,7 +42,8 @@ async def api_perfil(request: Request, p: Partida = P):
                             "c1": str(d.get("c1", ""))[:7], "c2": str(d.get("c2", ""))[:7],
                             "simbolo": d.get("simbolo") if d.get("simbolo") in SIMBOLOS else "ninguno",
                             "texto": str(d.get("texto", ""))[:3]}
-        p.actualizar_perfil(eslogan=cuerpo.get("eslogan"), estadio=cuerpo.get("estadio"), escudo=escudo_nuevo)
+        p.actualizar_perfil(eslogan=cuerpo.get("eslogan"), estadio=cuerpo.get("estadio"), escudo=escudo_nuevo,
+                            nombre=cuerpo.get("nombre"))
     except (ErrorJuego, TypeError, AttributeError) as e:
         return error_json(e)
     return {"ok": True}

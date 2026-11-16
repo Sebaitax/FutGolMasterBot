@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block contenido %}
+{% if vista == "ligas" %}
+<section class="tarjeta album-cabeza">
+  <img class="album-banner" src="/static/logo/vacio-coleccion.webp" alt="" width="900" height="500">
+  <div class="album-texto">
+    <h2>Álbum</h2>
+    <p class="tenue">Cada carta que te sale queda pegada en el álbum, aunque después la vendas. Junta la <b>mitad</b> de un club y
+      te ganas monedas; <b>complétalo</b> y te llevas un sobre premium y su escudo de colección.</p>
+    <div class="album-total"><b>{{ tengo|miles }}</b> de {{ total|miles }} cartas
+      <div class="barra-avance"><i style="width: {{ (100 * tengo / total)|round(1) if total else 0 }}%"></i></div></div>
+  </div>
+</section>
+<section class="tarjeta">
+  <h3>Ligas</h3>
+  <div class="album-ligas">
+    {% for lg in ligas %}
+    <a class="album-liga" href="/album?liga={{ lg.liga|urlencode }}">
+      {% if lg.bandera %}{{ lg.bandera|bandera('album-bandera') }}{% endif %}
+      <span class="al-nombre"><b>{{ lg.liga }}</b><small>{{ lg.pais }}</small></span>
+      <span class="al-avance"><small>{{ lg.tengo }}/{{ lg.total }} cartas · {{ lg.obj_tengo }}/{{ lg.obj_total }} {{ ico('shield') }}</small><span class="barra-avance"><i style="width: {{ lg.pct }}%"></i></span></span>
+      {% if lg.por_cobrar %}<span class="album-premio-aviso" title="Tienes premios para cobrar">{{ lg.por_cobrar }}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+{% elif vista == "liga" %}
+<section class="tarjeta">
+  <a class="enlace" href="/album">← Álbum</a>
+  <h2 class="album-titulo">{% if lg.bandera %}{{ lg.bandera|bandera('texto') }}{% endif %} {{ lg.liga }}</h2>
+  <p class="tenue">{{ lg.tengo }} de {{ lg.total }} cartas · elige un club.</p>
+  <div class="album-clubes">
+    {% for c in lg.clubes %}
+    <a class="album-club{{ ' completo' if c.pct >= 100 }}" href="/album?liga={{ c.liga|urlencode }}&amp;club={{ c.club|urlencode }}">
+      {{ escudo(c.club, "grande") }}
+      <b>{{ c.club }}</b>
+      <span class="barra-avance"><i style="width: {{ c.pct }}%"></i><em style="left: 50%"></em></span>
+      <small>{{ c.tengo }}/{{ c.total }} · {{ c.pct }}%</small>
+      <span class="album-objs">{% for o in c.objetos %}<i class="{{ 'tiene' if o.tengo }}" title="{{ o.tipo|capitalize }}{{ '' if o.tengo else ' (te falta)' }}">{{ ico('shield' if o.tipo == 'escudo' else 'estadio') }}</i>{% endfor %}</span>
+      {% if c.por_cobrar %}<span class="album-premio-aviso" title="Premio para cobrar">!</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+{% else %}
+<section class="tarjeta">
+  <a class="enlace" href="/album?liga={{ c.liga|urlencode }}">← {{ c.liga }}</a>
+  <div class="album-club-cabeza">
+    {{ escudo(c.club, "grande") }}
+    <div>
+      <h2>{{ c.club }}</h2>
+      <p class="tenue">{{ c.tengo }} de {{ c.total }} cartas · media del club {{ c.media }}</p>
+      <span class="barra-avance grande"><i style="width: {{ c.pct }}%"></i><em style="left: 50%"></em></span>
+    </div>
+  </div>
+  <div class="album-premios">
+    {% for pr in c.premios %}
+    <div class="album-premio{{ ' cobrado' if pr.cobrado }}{{ ' listo' if pr.logrado and not pr.cobrado }}">
+      <b>{{ 'Mitad del club' if pr.nivel == 50 else 'Club completo' }} <small>({{ pr.nivel }}%)</small></b>
+      <span>{{ ico('moneda') }} {{ pr.monedas|miles }}{% if pr.sobre %} · <i class="sobre-mini premium"></i> sobre premium · {{ ico('shield') }} escudo{% endif %}</span>
+      {% if pr.cobrado %}<em>{{ ico('check') }} Cobrado</em>
+      {% elif pr.logrado %}<button class="primario" data-nivel="{{ pr.nivel }}">¡Cobrar!</button>
+      {% else %}<em class="tenue">Te faltan {{ ((pr.nivel * c.total / 100) | round(0, 'ceil') | int) - c.tengo }}</em>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% if objetos %}
+<section class="tarjeta">
+  <h3>Escudo y estadio</h3>
+  <p class="tenue">Salen en los sobres; el escudo también te lo llevas al completar el club.</p>
+  <div class="grilla-col album-objetos" id="album-objetos"></div>
+</section>
+{% endif %}
+<section class="tarjeta">
+  <h3>Cartas</h3>
+  <div class="reservas inventario album-cartas" id="album-cartas"></div>
+</section>
+<script>
+(() => {
+  const cartas = {{ cartas|tojson }};
+  const C = {{ {"liga": c.liga, "club": c.club}|tojson }};
+  const objetos = {{ objetos|tojson }};
+  const cajaObj = document.getElementById('album-objetos');
+  if (cajaObj) cajaObj.innerHTML = objetos.map(o => FGM.objeto(o)).join('');
+  // las que faltan: sin foto (silueta), en gris; las que tuviste, a color
+  document.getElementById('album-cartas').innerHTML = cartas.map(f => {
+    const html = FGM.carta(f.tengo ? f : {...f, render: null});
+    return f.tengo ? html : html.replace('class="mini ', 'class="mini falta ');
+  }).join('');
+  document.querySelectorAll('.album-premio button').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try {
+      const r = await FGM.api('/api/album/premio', {...C, nivel: +b.dataset.nivel});
+      FGM.monedas && FGM.monedas(r.monedas_total);
+      let msg = `+${r.monedas.toLocaleString('es-CL')} monedas`;
+      if (r.sobre) msg += ' · sobre premium listo en el inicio';
+      if (r.escudo) msg += ` · escudo de ${r.escudo}`;
+      FGM.toast(msg);
+      FGM.confeti && FGM.confeti();
+      setTimeout(() => location.reload(), 1400);
+    } catch (e) { FGM.toast(e.message, {error: true}); b.disabled = false; }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

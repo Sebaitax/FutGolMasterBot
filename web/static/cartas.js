@@ -51,7 +51,7 @@ window.FGM = (() => {
     const af = opts.puesto ? afinidad(f.pos, opts.puesto) : 1;
     const fuera = f.estado && f.estado !== 'disponible';
     let marca = '';
-    if (fuera) marca = `<i class="marca mal" title="${f.estado}">${f.lesion ? '🚑' : '🟥'}</i>`;
+    if (fuera) marca = `<i class="marca mal" title="${f.estado}">${FGM_ICO(f.lesion ? 'ambulance' : 'tarjeta-roja')}</i>`;
     else if (af < 1) marca = `<i class="marca ${af < 0.9 ? 'mal' : 'medio'}" title="Rinde ${Math.round(af * 100)}% en este puesto">${Math.round(af * 100)}%</i>`;
     const q = opts.quimica;
     const anillo = q === undefined ? '' : `<i class="quim q${q >= 0.75 ? 3 : q >= 0.4 ? 2 : q > 0 ? 1 : 0}" title="Química ${Math.round(q * 100)}">${'◆'.repeat(q >= 0.75 ? 3 : q >= 0.4 ? 2 : q > 0 ? 1 : 0) || '◇'}</i>`;
@@ -65,7 +65,7 @@ window.FGM = (() => {
 
   // Objeto de colección (escudo o estadio). grande = versión para la apertura de sobres
   function objeto(o, grande = false) {
-    const img = o.imagen ? `<img src="${o.imagen}" alt="" loading="lazy">` : `<span class="obj-sin">${o.tipo === 'escudo' ? '🛡️' : '🏟️'}</span>`;
+    const img = o.imagen ? `<img src="${o.imagen}" alt="" loading="lazy">` : `<span class="obj-sin">${FGM_ICO(o.tipo === 'escudo' ? 'shield' : 'estadio')}</span>`;
     return `<div class="objeto tipo-${o.tipo} ${o.nivel} ${grande ? 'grande' : ''} ${o.tengo === false ? 'falta' : ''}" data-oid="${o.id}">
       <div class="obj-img">${img}</div>
       <span class="obj-tipo">${o.tipo === 'escudo' ? 'ESCUDO' : 'ESTADIO'}</span>
@@ -134,12 +134,12 @@ window.FGM = (() => {
 
   // Filtros de liga / país / club (+ búsqueda opcional). Las opciones se cruzan entre sí y muestran cuántas cartas hay.
   function filtroCartas(cont, fichas, alCambiar, {buscar = true} = {}) {
-    const CAMPOS = [['liga', '🏆 Liga'], ['nacion', '🌎 País'], ['club', '🛡️ Club']];
+    const CAMPOS = [['liga', 'Liga'], ['nacion', 'País'], ['club', 'Club']];
     const sel = {liga: '', nacion: '', club: ''};
     cont.classList.add('filtro-cartas');
     cont.innerHTML = (buscar ? '<input type="search" class="fc-buscar" placeholder="Buscar jugador…">' : '') +
       CAMPOS.map(([k]) => `<select data-k="${k}"></select>`).join('') +
-      '<button type="button" class="fc-limpiar enlace" hidden>✕ Limpiar</button>';
+      '<button type="button" class="fc-limpiar enlace" hidden>Limpiar</button>';
     const input = cont.querySelector('.fc-buscar'), limpiar = cont.querySelector('.fc-limpiar');
     const norm = t => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
     const pasa = (f, salvo) => CAMPOS.every(([k]) => k === salvo || !sel[k] || f[k] === sel[k]) &&
@@ -175,7 +175,7 @@ window.FGM = (() => {
     const inicio = Object.keys(vence)[0];
     const ciclo = [];
     for (let k = inicio; k && !ciclo.includes(k); k = vence[k]) ciclo.push(k);
-    const t = k => `<b>${tacticas[k].ico} ${esc(tacticas[k].nombre)}</b>`;
+    const t = k => `<b>${FGM_ICOTXT(tacticas[k].ico)} ${esc(tacticas[k].nombre)}</b>`;
     return `<p class="tg-titulo">Cada táctica le gana a una y pierde con otra (como piedra, papel o tijera):</p>
       <ol class="tg-ciclo">${ciclo.map(k => `<li>${t(k)} <span>le gana a</span> ${t(vence[k])}
         ${PORQUE[k] ? `<small>${esc(PORQUE[k])}</small>` : ''}</li>`).join('')}</ol>
@@ -187,5 +187,22 @@ window.FGM = (() => {
       </ul>`;
   }
 
-  return {guiaTacticas, objeto, LINEA, ETQ, esc, linea, pos, nivel, afinidad, escudo, escudoUrl, bandera, carta, reanimar, contar, confeti, toast, api, monedas, filtroCartas};
+  // Celebración al sacar una carta especial de un sobre: estrella (dorado) o crack (arcoíris, más grande)
+  const RANGO_CALIDAD = {normal: 0, buena: 1, estrella: 2, crack: 3};
+  function celebrar(calidad, nombre = '') {
+    if (calidad !== 'estrella' && calidad !== 'crack') return;
+    const crack = calidad === 'crack';
+    const el = document.createElement('div');
+    el.className = 'celebra ' + calidad;
+    el.innerHTML = `<div class="celebra-luz"></div><b>${crack ? '¡CRACK!' : '¡ESTRELLA!'}</b>${nombre ? `<span>${esc(nombre)}</span>` : ''}`;
+    document.body.appendChild(el);
+    confeti(crack ? 220 : 90);
+    if (crack) setTimeout(() => confeti(160), 500);
+    const S = window.FGM_SONIDO;
+    if (S) { try { S.gol(true); if (crack) setTimeout(() => S.gol(true), 700); } catch {} }
+    try { navigator.vibrate && navigator.vibrate(crack ? [80, 40, 80, 40, 200] : 120); } catch {}
+    setTimeout(() => el.remove(), crack ? 2600 : 1900);
+  }
+
+  return {celebrar, RANGO_CALIDAD, guiaTacticas, objeto, LINEA, ETQ, esc, linea, pos, nivel, afinidad, escudo, escudoUrl, bandera, carta, reanimar, contar, confeti, toast, api, monedas, filtroCartas};
 })();

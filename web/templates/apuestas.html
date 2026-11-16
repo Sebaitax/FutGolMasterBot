@@ -2,16 +2,16 @@
 {% block contenido %}
 <section class="tarjeta">
   <div class="bet-cab">
-    <h2>🎲 Apuestas</h2>
+    <h2>Apuestas</h2>
     <small class="tenue" id="bet-actualizado"></small>
   </div>
   <p class="tenue bet-ayuda">Partidos <b>reales</b> de las ligas del juego. Elige quién gana: la cuota queda fija cuando apuestas.
     Se cierra al empezar el partido y se paga sola al terminar (si se suspende, te devolvemos lo apostado).</p>
   <div class="bet-ligas" id="bet-ligas"></div>
   <div class="filtros bet-tabs" id="bet-tabs">
-    <button data-tab="partidos" class="activo">⚽ Partidos</button>
-    <button data-tab="mias">🧾 Mis apuestas</button>
-    <button data-tab="ranking">🏆 Ranking</button>
+    <button data-tab="partidos" class="activo">Partidos</button>
+    <button data-tab="mias">Mis apuestas</button>
+    <button data-tab="ranking">Ranking</button>
   </div>
   <div id="tab-partidos"></div>
   <div id="tab-mias" hidden></div>
@@ -36,7 +36,7 @@
 
   if (D.actualizado) $('bet-actualizado').textContent = `Actualizado ${hora(D.actualizado)}`;
   $('bet-ligas').innerHTML = D.ligas.map(l => `<a class="bet-liga${l.clave === D.liga ? ' activo' : ''}" href="?liga=${l.clave}">
-    <span>${l.bandera}</span>${esc(l.nombre)}<small>${l.partidos}</small></a>`).join('');
+    ${l.bandera_img ? `<img class="bandera texto" src="${l.bandera_img}" alt="">` : ''}${esc(l.nombre)}<small>${l.partidos}</small></a>`).join('');
   document.querySelector('.bet-liga.activo')?.scrollIntoView({inline: 'center', block: 'nearest'});
 
   // ---------- pestañas
@@ -57,7 +57,7 @@
       if (d !== ultimoDia) { html += `<h3 class="bet-dia">${esc(d)}</h3>`; ultimoDia = d; }
       const ya = abiertas.get(p.id);
       html += `<div class="bet-partido${ya ? ' apostado' : ''}">
-        <div class="bet-info"><span>${hora(p.ts)}</span><small>${esc(p.ronda || '')}</small>${ya ? `<em>🎟️ Apostaste ${miles(ya.monto)} a ${QUE[ya.eleccion].toLowerCase()}</em>` : ''}</div>
+        <div class="bet-info"><span>${hora(p.ts)}</span><small>${esc(p.ronda || '')}</small>${ya ? `<em>${FGM_ICO('ticket')} Apostaste ${miles(ya.monto)} a ${QUE[ya.eleccion].toLowerCase()}</em>` : ''}</div>
         <div class="bet-equipos">
           <span class="bet-eq">${escudo(p.escudos[0], p.local)}<b>${esc(p.local)}</b></span>
           <i>vs</i>
@@ -69,7 +69,7 @@
     }
     if (D.recientes.length) {
       html += `<h3 class="bet-dia">Resultados recientes</h3><div class="bet-recientes">` + D.recientes.map(p => `<div>
-        <span class="bet-estado ${p.grupo === 3 ? 'envivo' : ''}">${p.grupo === 3 ? '🔴 ' + esc(p.texto) : esc(dia(p.ts).split(',')[1] || '')}</span>
+        <span class="bet-estado ${p.grupo === 3 ? 'envivo' : ''}">${p.grupo === 3 ? FGM_ICO('punto-rojo') + ' ' + esc(p.texto) : esc(dia(p.ts).split(',')[1] || '')}</span>
         <span class="bet-r-eq">${escudo(p.escudos[0], p.local)}${esc(p.local)}</span>
         <b>${p.goles[0] ?? '-'} - ${p.goles[1] ?? '-'}</b>
         <span class="bet-r-eq visita">${esc(p.visita)}${escudo(p.escudos[1], p.visita)}</span></div>`).join('') + '</div>';
@@ -86,8 +86,8 @@
     const saldo = () => +$('monedas').dataset.valor || 0;
     const cuota = p.cuotas[e];
     const caja = $('bet-boleto');
-    caja.innerHTML = `<button class="cerrar enlace" id="bet-x" aria-label="Cerrar">✕</button>
-      <h2>🎟️ Tu apuesta</h2>
+    caja.innerHTML = `<button class="cerrar enlace" id="bet-x" aria-label="Cerrar">${FGM_ICO('x')}</button>
+      <h2>Tu apuesta</h2>
       <p class="tenue">${esc(p.local)} vs ${esc(p.visita)} · ${esc(dia(p.ts))} ${hora(p.ts)}</p>
       <p class="bet-eleccion">${e === 'X' ? 'Empate' : 'Gana ' + esc(e === '1' ? p.local : p.visita)} <b>× ${cuota.toFixed(2)}</b></p>
       <label class="bet-monto">Monto <input id="bet-monto" type="number" inputmode="numeric" min="${D.minima}" step="100" value="${Math.min(10000, saldo())}"></label>
@@ -95,7 +95,7 @@
       <p class="bet-premio">Si aciertas cobras <b id="bet-premio"></b></p>
       <button class="primario grande-btn" id="bet-ok">Apostar</button>`;
     const input = $('bet-monto');
-    const pintar = () => { $('bet-premio').textContent = '🪙 ' + miles((+input.value || 0) * cuota); };
+    const pintar = () => { $('bet-premio').innerHTML = FGM_ICO('moneda') + ' ' + miles((+input.value || 0) * cuota); };
     input.oninput = pintar; pintar();
     caja.querySelector('.bet-rapidos').onclick = ev => {
       const b = ev.target.closest('[data-m]'); if (!b) return;
@@ -113,7 +113,7 @@
         const r = await api('/api/apuestas', {partido: p.id, eleccion: e, monto});
         FGM.monedas(r.monedas); mias = r.mias;
         cerrar(); pintarPartidos(); pintarMias();
-        toast(`🎟️ Apostaste ${miles(monto)} · si aciertas cobras ${miles(r.premio)}`);
+        toast(`Apostaste ${miles(monto)} · si aciertas cobras ${miles(r.premio)}`);
       } catch (er) { toast(er.message, {error: true}); $('bet-ok').disabled = false; }
     };
     $('bet-modal').hidden = false;
@@ -123,8 +123,8 @@
   // ---------- mis apuestas
   function pintarMias() {
     const abiertas = mias.filter(a => a.estado === 'abierta').length;
-    document.querySelector('[data-tab=mias]').textContent = `🧾 Mis apuestas${abiertas ? ` (${abiertas})` : ''}`;
-    const ESTADO = {abierta: ['⏳', 'En juego'], ganada: ['✅', 'Ganada'], perdida: ['❌', 'Perdida'], devuelta: ['↩️', 'Devuelta']};
+    document.querySelector('[data-tab=mias]').textContent = `Mis apuestas${abiertas ? ` (${abiertas})` : ''}`;
+    const ESTADO = {abierta: [FGM_ICO('hourglass'), 'En juego'], ganada: [FGM_ICO('circle-check'), 'Ganada'], perdida: [FGM_ICO('circle-x'), 'Perdida'], devuelta: [FGM_ICO('undo-2'), 'Devuelta']};
     $('tab-mias').innerHTML = mias.length ? mias.map(a => {
       const [ico, txt] = ESTADO[a.estado];
       const que = a.eleccion === 'X' ? 'Empate' : 'Gana ' + (a.eleccion === '1' ? a.local : a.visita);

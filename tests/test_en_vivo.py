@@ -120,3 +120,54 @@ class TestRelojesEnVivo(TestEnVivo):
         vp.elegir(0, vp._validas(0)[0])
         with self.assertRaises(ValueError):
             vp.tactica(1, "presion")
+
+
+class TestBuscarOnline(unittest.TestCase):
+    """Partido por copas: cola de búsqueda online y premio al terminar."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.catalogo = Path(cls.tmp.name) / "catalogo.csv"
+        catalogo_ficticio(cls.catalogo)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def partida(self, semilla):
+        p = Partida(conectar(":memory:"))
+        self.addCleanup(p.con.close)
+        p.crear(f"Online {semilla}", semilla=semilla, catalogo=self.catalogo, divisiones=1)
+        return p
+
+    def test_empareja_a_dos_que_buscan(self):
+        sala = Sala()
+        a, b = self.partida(21), self.partida(22)
+        self.assertIsNone(sala.buscar_copas("a", 100, a.exportar_equipo()))
+        mid = sala.buscar_copas("b", 150, b.exportar_equipo())
+        self.assertIsNotNone(mid)
+        self.assertEqual(sala.buscar_copas("a", 100, a.exportar_equipo()), mid)
+        self.assertEqual(sala.partido(mid).escalera, {"a": 100, "b": 150})
+
+    def test_no_empareja_copas_muy_distintas(self):
+        sala = Sala()
+        a, b = self.partida(23), self.partida(24)
+        sala.buscar_copas("a", 0, a.exportar_equipo())
+        self.assertIsNone(sala.buscar_copas("b", 3000, b.exportar_equipo()))
+
+    def test_cancelar_justo_emparejado_devuelve_el_partido(self):
+        sala = Sala()
+        a, b = self.partida(25), self.partida(26)
+        sala.buscar_copas("a", 0, a.exportar_equipo())
+        mid = sala.buscar_copas("b", 0, b.exportar_equipo())
+        self.assertEqual(sala.cancelar_busqueda("a"), mid)   # no se deja solo al otro
+
+    def test_premio_online(self):
+        p = self.partida(27)
+        r = p.resultado_online(2, 1, "Rival", 0)
+        self.assertEqual(r["resultado"], "victoria")
+        self.assertGreater(p.copas, 0)
+        self.assertEqual(r["rival_tipo"], "jugador")
+        self.assertEqual(len(p.sobres_tiempo()), 1)
+        self.assertIsNone(p.historial_escalera[0]["partido"])

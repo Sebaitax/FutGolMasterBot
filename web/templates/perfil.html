@@ -5,20 +5,21 @@
   <div>
     <h1>{{ club }}</h1>
     <p class="pc-eslogan" id="vista-eslogan">{{ equipo.eslogan or "Sin eslogan todavía" }}</p>
-    <p class="tenue">🏟️ <span id="vista-estadio">{{ equipo.estadio }}</span>{% if hay_divisiones %} · <span class="div-badge {{ clave_div }}">{{ nombre_div }}</span>{% endif %}</p>
+    <p class="tenue">{{ ico('estadio') }} <span id="vista-estadio">{{ equipo.estadio }}</span>{% if hay_divisiones %} · <span class="div-badge {{ clave_div }}">{{ nombre_div }}</span>{% endif %}</p>
   </div>
 </section>
 
 {% if usuario %}
 <section class="tarjeta cuenta-caja">
   <h2>Tu cuenta</h2>
-  <p>{{ '🟢 Google · ' if usuario.google_sub }}{{ usuario.email }}{% if usuario.admin %} · <b>Administrador</b> · <a href="/admin/logs" target="_top">📋 Bitácora</a>{% endif %}</p>
-  <form method="post" action="/salir" target="_top"><button class="boton">🚪 Cerrar sesión</button></form>
+  <p>{{ 'Google · ' if usuario.google_sub }}{{ usuario.email }}{% if usuario.admin %} · <b>Administrador</b> · <a href="/admin/logs" target="_top">Bitácora</a>{% endif %}</p>
+  <form method="post" action="/salir" target="_top"><button class="boton">{{ ico('log-out') }} Cerrar sesión</button></form>
 </section>
 {% endif %}
 <section class="tarjeta">
   <h2>Datos del club</h2>
   <div class="form-perfil">
+    <label>Nombre del club <input id="nombre-club" maxlength="40" value="{{ equipo.nombre }}"></label>
     <label>Eslogan <input id="eslogan" maxlength="80" value="{{ equipo.eslogan or '' }}" placeholder="Ej.: ¡Hasta el final!"></label>
     <label>Estadio <input id="estadio" maxlength="40" value="{{ equipo.estadio or '' }}"></label>
     <button class="primario" id="guardar-datos">Guardar</button>
@@ -28,9 +29,9 @@
 <section class="tarjeta">
   <h2>Tu colección</h2>
   <p class="tenue">Escudos y estadios que te salieron en sobres. Toca uno para usarlo.</p>
-  <h3>🏟️ Estadios</h3>
+  <h3>Estadios</h3>
   <div class="grilla-col" id="mis-estadios"></div>
-  <h3>🛡️ Escudos</h3>
+  <h3>Escudos</h3>
   <div class="grilla-col" id="mis-escudos"></div>
 </section>
 
@@ -65,12 +66,12 @@
 <section class="tarjeta">
   <h2>Vitrina</h2>
   <div class="vitrina">
-    <div class="trofeo"><b>{{ stats.titulos|length }}</b><span>🏆 Títulos</span></div>
-    <div class="trofeo"><b>{{ stats.ascensos|length }}</b><span>⬆ Ascensos</span></div>
-    <div class="trofeo"><b>{{ stats.temporadas }}</b><span>📅 Temporadas</span></div>
+    <div class="trofeo"><b>{{ stats.titulos|length }}</b><span>Títulos</span></div>
+    <div class="trofeo"><b>{{ stats.ascensos|length }}</b><span>Ascensos</span></div>
+    <div class="trofeo"><b>{{ stats.temporadas }}</b><span>Temporadas</span></div>
   </div>
   {% for t in stats.titulos %}
-  <p class="titulo-item">🏆 Campeón de la {{ t.nombre_division or "liga" }} · temporada {{ t.temporada }}</p>
+  <p class="titulo-item">{{ ico('trophy') }} Campeón de la {{ t.nombre_division or "liga" }} · temporada {{ t.temporada }}</p>
   {% endfor %}
   {% set l, a = stats.record.liga, stats.record.amistoso %}
   <table class="stats record">
@@ -83,7 +84,7 @@
   <ul class="lista">
     {% for h in historial|reverse %}
     <li><span>T{{ h.temporada }} · {{ h.nombre_division or "Liga" }}</span>
-      <span>{{ h.posicion }}° · {{ h.puntos }} pts{% if h.posicion == 1 %} 🏆{% endif %}{% if h.movimiento == "asciende" %} ⬆{% elif h.movimiento == "desciende" %} ⬇{% endif %}</span></li>
+      <span>{{ h.posicion }}° · {{ h.puntos }} pts{% if h.posicion == 1 %} {{ ico('trophy') }}{% endif %}{% if h.movimiento == "asciende" %} {{ ico('arrow-up') }}{% elif h.movimiento == "desciende" %} {{ ico('arrow-down') }}{% endif %}</span></li>
     {% endfor %}
   </ul>
   {% endif %}
@@ -112,16 +113,18 @@
   $('texto').oninput = e => { d.texto = e.target.value.toUpperCase(); vista(); };
 
   $('guardar-escudo').onclick = async () => {
-    try { await api('/api/perfil', {escudo: d}); toast('Escudo guardado ✓'); setTimeout(() => location.reload(), 600); }
+    try { await api('/api/perfil', {escudo: d}); toast('Escudo guardado'); setTimeout(() => location.reload(), 600); }
     catch (e) { toast(e.message, {error: true}); }
   };
   $('guardar-datos').onclick = async () => {
     try {
-      await api('/api/perfil', {eslogan: $('eslogan').value, estadio: $('estadio').value});
+      const nombre = $('nombre-club').value.trim();
+      await api('/api/perfil', {nombre, eslogan: $('eslogan').value, estadio: $('estadio').value});
+      if (nombre !== {{ equipo.nombre|tojson }}) { toast('Nombre cambiado'); setTimeout(() => location.reload(), 600); return; }
       $('vista-eslogan').textContent = $('eslogan').value || 'Sin eslogan todavía';
       $('vista-estadio').textContent = $('estadio').value;
       reanimar($('vista-eslogan'), 'pulso');
-      toast('Guardado ✓');
+      toast('Guardado');
     } catch (e) { toast(e.message, {error: true}); }
   };
   $('archivo-logo').onchange = async e => {
@@ -130,7 +133,7 @@
     const r = await fetch('/api/perfil/logo', {method: 'POST', body: datos});
     const j = await r.json();
     if (!r.ok) { toast(j.error, {error: true}); return; }
-    toast('Logo subido ✓'); setTimeout(() => location.reload(), 600);
+    toast('Logo subido'); setTimeout(() => location.reload(), 600);
   };
   vista();
 

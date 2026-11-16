@@ -5,7 +5,7 @@
   <div>
     <h2>{{ amigo.nombre }}</h2>
     {% if amigo.eslogan %}<p class="tenue">“{{ amigo.eslogan }}”</p>{% endif %}
-    <p class="tenue">{{ amigo.division }} · 🏟️ {{ amigo.estadio }}</p>
+    <p class="tenue">{{ amigo.division }} · {{ ico('estadio') }} {{ amigo.estadio }}</p>
     <p>Media <b>{{ "%.1f"|format(amigo.fuerza) }}</b> · química <b>{{ amigo.quimica }}</b> · {{ amigo.formacion }} {{ amigo.mentalidad }}</p>
     <p class="tenue">En liga: {{ amigo.record.g }}G {{ amigo.record.e }}E {{ amigo.record.p }}P
       {% if entre_ustedes.g + entre_ustedes.e + entre_ustedes.p %} · Entre ustedes: {{ entre_ustedes.g }}G {{ entre_ustedes.e }}E {{ entre_ustedes.p }}P{% endif %}</p>
@@ -13,7 +13,7 @@
   {% if not mio %}
   <form method="post" action="/desafiar/{{ amigo.pid }}" class="amigo-accion">
     <input type="hidden" name="de_local" value="1">
-    <button class="primario">⚔️ Desafiar a su plantilla</button>
+    <button class="primario">{{ ico('swords') }} Desafiar a su plantilla</button>
   </form>
   {% endif %}
 </section>

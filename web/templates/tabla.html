@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block contenido %}
 <section class="tarjeta">
-  <h2>🏆 Ranking de copas</h2>
+  <h2>Ranking de copas</h2>
   <p class="tenue">Todos los jugadores del juego, ordenados por copas. Gana partidos por copas para subir.</p>
   <ol class="ranking-copas">
     {% for r in ranking %}
     <li class="{{ 'yo' if r.yo }} arena-{{ r.cancha.tema }}">
-      <span class="rc-pos">{{ '🥇' if loop.index == 1 else '🥈' if loop.index == 2 else '🥉' if loop.index == 3 else loop.index }}</span>
+      <span class="rc-pos {{ ['', 'oro', 'plata', 'bronce'][loop.index] if loop.index <= 3 else '' }}">{{ loop.index }}</span>
       <span class="rc-club">{{ escudo(r.nombre, "chico") }}<b>{{ r.nombre }}</b>{% if r.yo %} <small>(tú)</small>{% endif %}</span>
-      <span class="rc-cancha" title="{{ r.cancha.nombre }}">{{ r.bandera }} {{ r.cancha.ico }} <small>{{ r.cancha.nombre }}</small></span>
-      <strong class="rc-copas">🏆 {{ r.copas|miles }}</strong>
+      <span class="rc-cancha" title="{{ r.cancha.nombre }}">{{ r.bandera|bandera('texto') }} {{ insignia(r.cancha) }} <small>{{ r.cancha.nombre }}</small></span>
+      <strong class="rc-copas">{{ ico('copa') }} {{ r.copas|miles }}</strong>
     </li>
     {% endfor %}
   </ol>

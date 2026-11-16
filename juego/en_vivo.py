@@ -13,7 +13,9 @@ from __future__ import annotations
 import random
 import threading
 import time
+import json
 import uuid
+from pathlib import Path
 
 from juego import antitrampas
 
@@ -28,6 +30,8 @@ ESPERA_TOQUE = 8        # segundos por ronda del pulso
 ABANDONO = 90           # sin noticias de un jugador: el partido sigue solo
 MAX_ESPERA_LLEGAR = 120 # si alguien nunca llega a la jugada clave (pestaña congelada), igual corre el reloj
 ESPERANDO_VENCE = 120   # la sala de espera olvida a quien deja de preguntar
+COLA_VENCE = 6          # la búsqueda de partido por copas olvida a quien deja de preguntar (cerró la pantalla)
+RANGO_COPAS = 400       # diferencia de copas aceptable al buscar rival online (se amplía con la espera)
 REACCIONES = ("😂", "🔥", "😱", "👏", "😤", "🫡")
 APUESTAS = (0, 1000, 5000, 20000)
 DEFENSA_SEGURA = {"jugada": "cerrar", "corner": "zona", "tiro_libre": "marcar"}
@@ -69,6 +73,9 @@ class PartidoVivo:
         self.apuesta = apuesta          # monedas que puso cada uno (el ganador se lleva las dos)
         self.reacciones: list[dict] = []
         self.sospechas = [0, 0]           # toques sospechosos de cada lado (control antitrampas)
+        self.escalera: dict[str, int] | None = None   # partido por copas: {pid: copas al empezar}
+        self.creado = time.time()
+        self.resumen_escalera: dict[str, dict] = {}   # lo que ganó/perdió cada uno (copas, monedas, sobre)
         self.revancha = [False, False]
         self.revancha_mid: str | None = None
         self.lock = threading.RLock()
@@ -307,6 +314,48 @@ class PartidoVivo:
                 "apuesta": self.apuesta,
             }
 
+    # ---------------------------------------------------------------- guardar y terminar solo
+
+    def a_dict(self) -> dict:
+        """Lo mínimo para rearmar el partido (misma semilla + mismas decisiones = mismo partido)."""
+        return {"mid": self.mid, "local": {"pid": self.pids[0], "equipo": self.datos[0]},
+                "visita": {"pid": self.pids[1], "equipo": self.datos[1]}, "semilla": self.semilla,
+                "decisiones": self.decisiones, "intervenciones": self.intervenciones,
+                "apuesta": self.apuesta, "escalera": self.escalera}
+
+    @classmethod
+    def desde_dict(cls, d: dict) -> "PartidoVivo":
+        vp = cls(d["mid"], d["local"], d["visita"], apuesta=d.get("apuesta", 0))
+        vp.semilla, vp.escalera = d["semilla"], d.get("escalera")
+        vp.decisiones, vp.intervenciones = list(d.get("decisiones", [])), list(d.get("intervenciones", []))
+        vp._reconstruir()
+        vp._nueva_pausa()
+        return vp
+
+    def firma_guardado(self) -> tuple:
+        return (len(self.decisiones), len(self.intervenciones), self.resultado is not None)
+
+    def terminar_solo(self):
+        """Juega lo que falta sin los jugadores (p. ej. el servidor se reinició a mitad del partido):
+        en cada jugada clave la máquina elige lo más seguro por los dos y los toques valen 0,5."""
+        with self.lock:
+            for _ in range(300):
+                if not self.pausa or self.resultado is not None:
+                    break
+                ataca, _defiende = self._roles()
+                penal = self.pausa["tipo"] == "penal"
+                for lado in (0, 1):
+                    if self.eleccion[lado] is None:
+                        self.eleccion[lado] = ("izq" if lado == ataca else "centro") if penal else \
+                            (self._validas(lado)[0] if lado == ataca else DEFENSA_SEGURA.get(self.pausa.get("clase"), "cerrar"))
+                if self.prep is None:
+                    self._preparar()
+                    continue
+                for lado in (0, 1):
+                    while len(self.toques[lado]) < RONDAS_PULSO:
+                        self.toques[lado].append(0.5)
+                self._cerrar_pausa()
+
     def abandonado(self) -> bool:
         return all(time.time() - t > ABANDONO for t in self.ultimo_contacto)
 
@@ -314,11 +363,50 @@ class PartidoVivo:
 class Sala:
     """Quién está esperando rival y los partidos en curso (en memoria del servidor)."""
 
-    def __init__(self):
+    def __init__(self, carpeta: Path | None = None):
         self.lock = threading.RLock()
+        self.carpeta = carpeta            # data/vivo: un .json por partido en curso (None = no se guarda)
         self.esperando: dict[str, dict] = {}
         self.partidos: dict[str, PartidoVivo] = {}
         self.de_jugador: dict[str, str] = {}
+        self.cola: dict[str, dict] = {}   # buscando partido por copas: pid -> {copas, equipo, desde, visto}
+
+    def buscar_copas(self, pid: str, copas: int, equipo: dict) -> str | None:
+        """Busca rival online para un partido por copas. Devuelve el id del partido si ya hay (o si lo
+        arma con otro que también está buscando, con copas parecidas); si no, None y sigue en la cola."""
+        with self.lock:
+            self._limpiar()
+            ahora = time.time()
+            for otro in [p for p, e in self.cola.items() if ahora - e["visto"] > COLA_VENCE]:
+                del self.cola[otro]
+            mid = self.de_jugador.get(pid)
+            if mid and mid in self.partidos and self.partidos[mid].resultado is None:
+                self.cola.pop(pid, None)
+                return mid
+            yo = self.cola.setdefault(pid, {"copas": copas, "equipo": equipo, "desde": ahora})
+            yo.update(copas=copas, equipo=equipo, visto=ahora)
+            rango = RANGO_COPAS + 40 * (ahora - yo["desde"])   # mientras más esperas, más amplio
+            candidatos = [(abs(e["copas"] - copas), p) for p, e in self.cola.items()
+                          if p != pid and p not in self.de_jugador and abs(e["copas"] - copas) <= rango]
+            if not candidatos:
+                return None
+            _, rival = min(candidatos)
+            suyo = self.cola.pop(rival)
+            self.cola.pop(pid, None)
+            mid = uuid.uuid4().hex[:12]
+            vp = PartidoVivo(mid, {"pid": rival, "equipo": suyo["equipo"]}, {"pid": pid, "equipo": equipo})
+            vp.escalera = {rival: suyo["copas"], pid: copas}   # partido por copas: al final suma o resta
+            self.partidos[mid] = vp
+            self.de_jugador[pid] = self.de_jugador[rival] = mid
+            return mid
+
+    def cancelar_busqueda(self, pid: str) -> str | None:
+        """Sale de la cola. Si justo lo emparejaron, devuelve ese partido (no se puede dejar al otro solo)."""
+        with self.lock:
+            self.cola.pop(pid, None)
+            mid = self.de_jugador.get(pid)
+            p = self.partidos.get(mid) if mid else None
+            return mid if p and p.escalera and p.resultado is None else None
 
     def _limpiar(self):
         ahora = time.time()
@@ -390,6 +478,35 @@ class Sala:
 
     def partido(self, mid: str) -> PartidoVivo | None:
         return self.partidos.get(mid)
+
+    def guardar(self, vp: PartidoVivo, forzar: bool = False):
+        """Guarda el partido en disco si cambió (decisiones o tácticas). Lo llama la web tras cada acción."""
+        if not self.carpeta or vp.resultado is not None:
+            return
+        firma = vp.firma_guardado()
+        if not forzar and getattr(vp, "_firma_guardada", None) == firma:
+            return
+        self.carpeta.mkdir(parents=True, exist_ok=True)
+        tmp = self.carpeta / f"{vp.mid}.tmp"
+        tmp.write_text(json.dumps(vp.a_dict(), ensure_ascii=False), encoding="utf-8")
+        tmp.replace(self.carpeta / f"{vp.mid}.json")
+        vp._firma_guardada = firma
+
+    def olvidar(self, mid: str):
+        if self.carpeta:
+            (self.carpeta / f"{mid}.json").unlink(missing_ok=True)
+
+    def pendientes(self) -> list[dict]:
+        """Partidos que quedaron a medias (el servidor se reinició): para terminarlos y dar el resultado."""
+        if not self.carpeta or not self.carpeta.is_dir():
+            return []
+        salida = []
+        for f in sorted(self.carpeta.glob("*.json")):
+            try:
+                salida.append(json.loads(f.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                f.unlink(missing_ok=True)
+        return salida
 
     def terminar(self, mid: str):
         with self.lock:

@@ -455,7 +455,7 @@ class Narrador:
             marcador = list(ev.datos.get("marcador", (0, 0)))
             if ev.tipo == "inicio":
                 tipo = {"liga": "Liga rankeada", "escalera": "Partido por copas 🏆"}.get(self.r.tipo, "Amistoso")
-                lineas.append(Linea("", f"🏟️ **{l} 🆚 {v}** · {tipo}\n⏳ ¡Rueda la pelota!", "inicio", 0, 1))
+                lineas.append(Linea("", f"🏟️ **{l} vs {v}** · {tipo}\n⏳ ¡Rueda la pelota!", "inicio", 0, 1))
                 for eq in (0, 1):
                     nivel = self._nivel_quimica(eq)
                     if nivel:

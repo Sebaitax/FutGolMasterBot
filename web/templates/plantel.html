@@ -9,18 +9,18 @@
   </div>
   <div class="controles">
     <label>Formación <select id="formacion"></select></label>
-    <label>Mentalidad
+    <label hidden>Mentalidad
       <select id="mentalidad">
         {% for m in mentalidades %}<option value="{{ m }}">{{ m|capitalize }}</option>{% endfor %}
       </select>
     </label>
     <div class="auto-menu">
-      <button id="auto" type="button">✨ Automático ▾</button>
+      <button id="auto" type="button">Automático ▾</button>
       <div class="auto-pop" id="auto-pop" hidden>
-        <button data-modo="equipo"><b>⚡ Mejor equipo</b><small>la mejor media efectiva (OVR + química), con tu formación</small></button>
-        <button data-modo="huecos"><b>🧩 Completar huecos</b><small>solo llena puestos vacíos, lesionados o suspendidos</small></button>
-        <div class="auto-grupo"><b>🎯 Armar por…</b>
-          <select id="auto-tipo"><option value="liga">🏆 Liga</option><option value="nacion">🌎 País</option><option value="club">🛡️ Club</option></select>
+        <button data-modo="equipo"><b>Mejor equipo</b><small>la mejor media efectiva (OVR + química), con tu formación</small></button>
+        <button data-modo="huecos"><b>Completar huecos</b><small>solo llena puestos vacíos, lesionados o suspendidos</small></button>
+        <div class="auto-grupo"><b>Armar por…</b>
+          <select id="auto-tipo"><option value="liga">Liga</option><option value="nacion">País</option><option value="club">Club</option></select>
           <select id="auto-valor"></select>
           <button data-modo="grupo" class="primario">Armar</button>
         </div>
@@ -55,8 +55,8 @@
   <div class="encabezado">
     <h2>Reservas</h2>
     <div class="fila" style="margin:0">
-      <button id="vender-repetidas" class="chico-btn" hidden>♻ Vender repetidas</button>
-      <button id="modo-vender" class="chico-btn">🪙 Vender varias</button>
+      <button id="vender-repetidas" class="chico-btn" hidden>Vender repetidas</button>
+      <button id="modo-vender" class="chico-btn">{{ ico('moneda') }} Vender varias</button>
     </div>
   </div>
   <div id="filtro-cartas"></div>
@@ -199,7 +199,7 @@
     };
     reservas.innerHTML = lista.map(f => carta(f, {
       atrib: 'draggable="true"',
-      extra: marcaRepetida(f.pid) + marcaDelta(f.pid) + (vendiendo ? `<i class="check ${aVender.has(f.pid) ? 'si' : ''}">${aVender.has(f.pid) ? '✓' : ''}</i>` : ''),
+      extra: marcaRepetida(f.pid) + marcaDelta(f.pid) + (vendiendo ? `<i class="check ${aVender.has(f.pid) ? 'si' : ''}">${aVender.has(f.pid) ? FGM_ICO('check') : ''}</i>` : ''),
     })).join('') || '<p class="tenue">Todos tus jugadores están en el once o en la banca.</p>';
     $('vender-repetidas').hidden = !repetidas().sobran.size || vendiendo;
     reservas.classList.toggle('vendiendo', vendiendo);
@@ -221,11 +221,11 @@
     const NOMBRE_STAT = {PAC: 'Velocidad', SHO: 'Tiro', PAS: 'Pase', DRI: 'Regate', DEF: 'Defensa', PHY: 'Físico'};
     const barras = Object.entries(f.stats).map(([k, v]) =>
       `<div class="barra-stat"><span>${NOMBRE_STAT[k] || ETQ[k] || k}</span><i><em style="width:${v}%"></em></i><b>${v}${f.mejora > 1 ? `<small class="plus">+${f.mejora - 1}</small>` : ''}</b></div>`).join('');
-    const estado = f.lesion ? `<p class="d-estado">🚑 Lesionado ${f.lesion} fecha(s)</p>` : f.suspension ? `<p class="d-estado">🟥 Suspendido ${f.suspension} fecha(s)</p>` : '';
+    const estado = f.lesion ? `<p class="d-estado">${FGM_ICO('ambulance')} Lesionado ${f.lesion} fecha(s)</p>` : f.suspension ? `<p class="d-estado">${FGM_ICO('tarjeta-roja')} Suspendido ${f.suspension} fecha(s)</p>` : '';
     const donde = once.indexOf(f.pid);
     const rol = donde < 0 ? 'Reserva' : donde < 11 ? 'Titular' : 'Suplente';
     detalle.innerHTML = `
-      <button class="enlace d-cerrar" id="d-cerrar" title="Cerrar">✕</button>
+      <button class="enlace d-cerrar" id="d-cerrar" title="Cerrar">${FGM_ICO('x')}</button>
       <div class="d-ficha">
         <div class="d-carta">${carta(f, {grande: true})}</div>
         <div class="d-info">
@@ -233,13 +233,13 @@
           <p class="d-club">${FGM.escudo(f.club, 'chico')} ${esc(f.club)}</p>
           <p>${FGM.bandera(f.nacion, 'texto')} ${esc(f.nacion)}</p>
           <p class="tenue">${esc(FGM.pos(f.pos))} · ${rol} · Media <b>${f.ovr}</b>${f.mejora > 1 ? ` <small class="plus">+${f.mejora - 1}</small>` : ''}</p>
-          <p class="tenue">${f.pj} PJ · ${f.goles} G · ${f.asis} A${f.amarillas ? ' · 🟨 ' + f.amarillas : ''}</p>
+          <p class="tenue">${f.pj} PJ · ${f.goles} G · ${f.asis} A${f.amarillas ? ' · ' + FGM_ICO('tarjeta-amarilla') + ' ' + f.amarillas : ''}</p>
           ${estado}
         </div>
       </div>
       <div class="barras">${barras}</div>
       <div class="d-vender"><a href="/carta/${f.carta}.png" target="_blank" class="enlace">Ver carta</a>
-        <button class="enlace" id="vender-uno">Vender · 🪙 ${f.venta.toLocaleString('es-CL')}</button></div>`;
+        <button class="enlace" id="vender-uno">Vender · ${FGM_ICO('moneda')} ${f.venta.toLocaleString('es-CL')}</button></div>`;
     $('vender-uno').onclick = () => vender([f.pid]);
     $('d-cerrar').onclick = () => { seleccion = null; pintar(); };
     detalle.hidden = false;
@@ -321,7 +321,7 @@
     return new Promise(ok => timer = setTimeout(async () => {
       try {
         const j = await api('/api/alineacion', {formacion, mentalidad: $('mentalidad').value, once, auto});
-        if (!silencio) toast('Guardado ✓'); ok(j);
+        if (!silencio) toast('Guardado'); ok(j);
       } catch (e) { toast(e.message, {error: true}); ok(null); }
     }, auto ? 0 : 350));
   }
@@ -409,12 +409,12 @@
     const clave = l => l.slice(TITULARES).filter(Boolean).sort().join();
     if (clave(nuevo) === clave(once)) for (let i = TITULARES; i < TOTAL; i++) nuevo[i] = once[i];
     const cambiados = nuevo.map((pid, i) => pid !== once[i] ? i : -1).filter(i => i >= 0);
-    if (!cambiados.length) { toast('Tu equipo ya es el mejor para eso 👌'); return; }
+    if (!cambiados.length) { toast('Tu equipo ya es el mejor para eso'); return; }
     const enBancaAntes = new Set(once.slice(TITULARES).filter(Boolean));
     const nuevosBanca = nuevo.slice(TITULARES).filter(pid => pid && !enBancaAntes.has(pid)).length;
     once = nuevo; seleccion = null; pintar(cambiados); guardar(false, true);
     const ef = medias().efectiva;
-    toast(`✨ Química ${qAntes} → ${quimica().equipo} · Efectiva ${efAntes.toFixed(1)} → ${ef.toFixed(1)}`
+    toast(`Química ${qAntes} → ${quimica().equipo} · Efectiva ${efAntes.toFixed(1)} → ${ef.toFixed(1)}`
       + (nuevosBanca ? ` · ${nuevosBanca} suplente${nuevosBanca === 1 ? '' : 's'} nuevo${nuevosBanca === 1 ? '' : 's'}` : ''), {
       accion: 'Deshacer', ms: 9000,
       alHacer: () => { const c = once.map((pid, i) => pid !== antes[i] ? i : -1).filter(i => i >= 0); once = antes; pintar(c); guardar(); },
@@ -424,7 +424,7 @@
   // ---------- vender (una o varias) con deshacer
   function barraVenta() {
     const total = [...aVender].reduce((a, pid) => a + porPid[pid].venta, 0);
-    $('bv-texto').innerHTML = `${aVender.size} carta${aVender.size === 1 ? '' : 's'} · 🪙 <b>${total.toLocaleString('es-CL')}</b>`;
+    $('bv-texto').innerHTML = `${aVender.size} carta${aVender.size === 1 ? '' : 's'} · ${FGM_ICO('moneda')} <b>${total.toLocaleString('es-CL')}</b>`;
     $('bv-ok').disabled = !aVender.size;
   }
   $('modo-vender').onclick = () => {
@@ -455,7 +455,7 @@
       seleccion = null; aVender.clear();
       if (vendiendo) $('modo-vender').click(); else pintar();
       FGM.monedas(j.monedas);
-      toast(`Vendida${pids.length > 1 ? 's' : ''} por ${j.monto.toLocaleString('es-CL')} 🪙`, {accion: 'Deshacer', ms: 8000, alHacer: deshacer});
+      toast(`Vendida${pids.length > 1 ? 's' : ''} por ${j.monto.toLocaleString('es-CL')} monedas`, {accion: 'Deshacer', ms: 8000, alHacer: deshacer});
     } catch (e) {
       document.querySelectorAll('.vendida').forEach(el => el.classList.remove('vendida'));
       toast(e.message, {error: true});
@@ -474,7 +474,7 @@
     $('tabs-alin').innerHTML = al.map(a =>
       `<button class="tab-alin ${a.activa ? 'activa' : ''}" data-id="${a.id}">${esc(a.nombre)}${a.activa ? ' <small>▶ juega</small>' : ''}</button>`).join('') +
       (al.length < 5 ? '<button class="tab-alin nueva" data-accion="nueva">＋ Nueva</button>' : '') +
-      '<button class="tab-alin menu-alin" data-accion="menu" title="Renombrar o borrar">✎</button>';
+      '<button class="tab-alin menu-alin" data-accion="menu" title="Renombrar o borrar">' + FGM_ICO('pencil') + '</button>';
   }
   $('tabs-alin').onclick = async e => {
     const b = e.target.closest('button'); if (!b) return;

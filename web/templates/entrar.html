@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% block clase_body %}pantalla-entrar{% endblock %}
 {% block contenido %}
 <section class="tarjeta centrada entrar">
-  <h1>⚽ FutGolMaster</h1>
+  <h1 class="entrar-logo"><img src="/static/logo/logo.webp" alt="FutGolMaster" width="260" height="323"></h1>
   <p class="tenue">Arranca en la Cancha del Barrio y sube hasta la Primera División.</p>
 
   {% if google %}
@@ -30,7 +31,8 @@
     <input name="clave" type="password" placeholder="Contraseña" required autocomplete="current-password">
     <button class="primario grande-btn">Entrar</button>
   </form>
-  <p class="tenue entrar-pie">¿No tienes cuenta? <a href="/entrar?modo=registro" target="_top">Créala acá</a>.</p>
+  <p class="tenue entrar-pie">¿No tienes cuenta? <a href="/entrar?modo=registro" target="_top">Créala acá</a>.
+    · <a href="/olvide" target="_top">¿Olvidaste tu contraseña?</a></p>
   {% endif %}
 </section>
 <style>

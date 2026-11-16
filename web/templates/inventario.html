@@ -23,10 +23,10 @@
     <button data-n="" class="activo">Todo nivel</button><button data-n="oro">Oro</button><button data-n="plata">Plata</button><button data-n="bronce">Bronce</button>
   </div>
   <div class="filtros" id="extras">
-    <button data-x="mejorar">⬆ Se puede mejorar</button>
-    <button data-x="repetidas">♻ Repetidas</button>
-    <button data-x="once">📋 En el once</button>
-    <button data-x="fuera">🚑 No disponibles</button>
+    <button data-x="mejorar">{{ ico('arrow-up') }} Se puede mejorar</button>
+    <button data-x="repetidas">Repetidas</button>
+    <button data-x="once">En el once</button>
+    <button data-x="fuera">No disponibles</button>
   </div>
   <div class="reservas inventario" id="grilla"></div>
 </section>
@@ -38,7 +38,7 @@
   </div>
   <p class="tenue">Escudos y estadios de los clubes reales. Salen en los sobres. Toca uno que tengas para usarlo en tu club: el escudo pasa a ser tu logo y el estadio se ve en tus partidos de local.</p>
   <div class="filtros" id="tipos-col">
-    <button data-t="" class="activo">Todo</button><button data-t="escudo">🛡️ Escudos</button><button data-t="estadio">🏟️ Estadios</button>
+    <button data-t="" class="activo">Todo</button><button data-t="escudo">Escudos</button><button data-t="estadio">Estadios</button>
     <button data-solo="1">Solo los que tengo</button>
   </div>
   <div class="grilla-col" id="grilla-col"></div>
@@ -75,7 +75,7 @@
     $('grilla').innerHTML = l.map((f, i) => carta(f, {
       atrib: `style="animation-delay:${Math.min(i, 30) * 20}ms"`,
       extra: (f.copias > 1 ? `<i class="repetida">×${f.copias}</i>` : '') +
-             (f.puede_mejorar ? '<i class="se-mejora" title="Se puede mejorar">⬆</i>' : '') +
+             (f.puede_mejorar ? '<i class="se-mejora" title="Se puede mejorar">' + FGM_ICO('arrow-up') + '</i>' : '') +
              (f.en_once ? '<i class="en-once" title="En el once">●</i>' : ''),
     })).join('') || '<p class="tenue">No hay cartas con esos filtros.</p>';
   }
@@ -103,12 +103,12 @@
       `<div class="barra-stat"><span>${ETQ[k] || k}</span><i><em style="width:${v}%"></em></i><b>${v}${f.mejora > 1 ? `<small class="plus">+${f.mejora - 1}</small>` : ''}</b></div>`).join('');
     const monedas = +$('monedas').dataset.valor;
     let boton;
-    if (f.mejora >= D.maximo) boton = '<p class="tenue">Nivel máximo alcanzado ✨</p>';
+    if (f.mejora >= D.maximo) boton = '<p class="tenue">Nivel máximo alcanzado</p>';
     else if (f.copias < 2) boton = '<p class="tenue">Consigue otra copia de este jugador (sobres o carta gratis) para mejorarlo.</p>';
     else boton = `<button class="primario grande-btn" id="btn-mejorar" ${monedas < f.costo_mejora ? 'disabled' : ''}>
-        ⬆ Mejorar a nivel ${f.mejora + 1} · 🪙 ${f.costo_mejora.toLocaleString('es-CL')}<br><small>gasta 1 copia repetida</small></button>`;
+        ${FGM_ICO('arrow-up')} Mejorar a nivel ${f.mejora + 1} · ${FGM_ICO('moneda')} ${f.costo_mejora.toLocaleString('es-CL')}<br><small>gasta 1 copia repetida</small></button>`;
     ficha.innerHTML = `
-      <button class="enlace cerrar" id="cerrar">✕</button>
+      <button class="enlace cerrar" id="cerrar" aria-label="Cerrar">${FGM_ICO('x')}</button>
       <div class="fi-cab">
         <div class="fi-carta" id="fi-carta">${carta(f, {grande: true})}</div>
         <div class="fi-info">
@@ -161,7 +161,7 @@
     const col = D.coleccion;
     const tengo = col.filter(o => o.tengo);
     const esc_ = tengo.filter(o => o.tipo === 'escudo').length, est = tengo.filter(o => o.tipo === 'estadio').length;
-    $('contador-col').textContent = `🛡️ ${esc_}/${col.filter(o => o.tipo === 'escudo').length} · 🏟️ ${est}/${col.filter(o => o.tipo === 'estadio').length}`;
+    $('contador-col').innerHTML = `${FGM_ICO('shield')} ${esc_}/${col.filter(o => o.tipo === 'escudo').length} · ${FGM_ICO('estadio')} ${est}/${col.filter(o => o.tipo === 'estadio').length}`;
     const lista = col.filter(o => (!tipoCol || o.tipo === tipoCol) && (!soloTengo || o.tengo))
       .sort((a, b) => (b.tengo - a.tengo) || ({oro: 0, plata: 1, bronce: 2}[a.nivel] - {oro: 0, plata: 1, bronce: 2}[b.nivel]));
     $('grilla-col').innerHTML = lista.map(o => FGM.objeto(o)).join('') || '<p class="tenue">Nada por aquí todavía.</p>';

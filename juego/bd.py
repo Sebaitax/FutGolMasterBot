@@ -58,6 +58,15 @@ CREATE TABLE IF NOT EXISTS mercado (
     id INTEGER PRIMARY KEY, carta_id INTEGER REFERENCES cartas(id), vendedor_id INTEGER REFERENCES equipos(id),
     precio INTEGER, publicada INTEGER, expira INTEGER  -- publicada/expira: temporada * 100 + fecha
 );
+-- álbum: toda carta que alguna vez entró a tu plantel (aunque la vendas) y los premios ya cobrados
+CREATE TABLE IF NOT EXISTS album (carta_id INTEGER PRIMARY KEY, desde REAL);
+CREATE TABLE IF NOT EXISTS album_premios (clave TEXT PRIMARY KEY, cobrado REAL);
+CREATE TRIGGER IF NOT EXISTS album_al_entrar AFTER INSERT ON plantilla
+WHEN NEW.equipo_id = (SELECT CAST(valor AS INTEGER) FROM estado WHERE clave = 'usuario_id')
+BEGIN INSERT OR IGNORE INTO album (carta_id, desde) VALUES (NEW.carta_id, strftime('%s', 'now')); END;
+CREATE TRIGGER IF NOT EXISTS album_al_cambiar AFTER UPDATE OF equipo_id ON plantilla
+WHEN NEW.equipo_id = (SELECT CAST(valor AS INTEGER) FROM estado WHERE clave = 'usuario_id')
+BEGIN INSERT OR IGNORE INTO album (carta_id, desde) VALUES (NEW.carta_id, strftime('%s', 'now')); END;
 CREATE INDEX IF NOT EXISTS ix_plantilla_equipo ON plantilla(equipo_id);
 CREATE INDEX IF NOT EXISTS ix_partidos_fecha ON partidos(temporada, fecha);
 """

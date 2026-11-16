@@ -1,11 +1,13 @@
 """Partido contra la máquina: en vivo (pausas, tácticas, jugadas clave), repetición y resumen."""
 import json
+import time as _time
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from juego.formaciones import COORDENADAS
 from juego.partida import ErrorJuego, Partida
 from partidos.motor import ESPERA_TACTICA, FORMACIONES, MENTALIDADES, MINUTOS_LECTURA, PAUSAS_TACTICAS, TACTICAS, VENCE
 from urllib.parse import quote
+from web import bitacora
 from web.comun import P, error_json, ir, pagina, plantillas, refrescar_escudos, render_url
 
 router = APIRouter()
@@ -85,7 +87,7 @@ def partido_vivo(request: Request, partido_id: int, p: Partida = P):
     datos = _datos_partido(p, p.partido(partido_id))
     datos["modo"] = "vivo"
     datos["equipos"] = p.alineaciones_vivo()
-    return pagina(request, "partido.html", p, partido=datos, datos=json.dumps(datos, ensure_ascii=False))
+    return pagina(request, _plantilla_partido(request), p, partido=datos, datos=json.dumps(datos, ensure_ascii=False))
 
 
 def _renders_pausa(r):
@@ -93,6 +95,9 @@ def _renders_pausa(r):
     pausa = r.get("pausa") if isinstance(r, dict) else None
     if not pausa:
         return r
+    t = pausa.get("tirador")
+    if isinstance(t, dict) and "render" not in t:   # la carta del jugador de la jugada clave, con su foto
+        t["render"] = render_url(t.get("completo") or t["nombre"], t.get("club", ""))
     est = pausa.get("estado") or {}
     for j in est.get("cancha", []) + est.get("banca", []):
         j["render"] = render_url(j.get("completo") or j["nombre"], j.get("club", ""))
@@ -106,7 +111,15 @@ def _renders_pausa(r):
 async def api_avanzar(request: Request, p: Partida = P):
     cuerpo = await request.json()
     try:
-        return _renders_pausa(p.avanzar_partido(cuerpo.get("decision"), int(cuerpo.get("desde", 0)), bool(cuerpo.get("terminar"))))
+        info = ((p.partido_en_vivo() or {}).get("escalera") or {}) if cuerpo.get("terminar") else {}
+        r = p.avanzar_partido(cuerpo.get("decision"), int(cuerpo.get("desde", 0)), bool(cuerpo.get("terminar")))
+        if info and p.historial_escalera:
+            h = p.historial_escalera[0]
+            bitacora.anotar("metrica", "partido_fin", detalle={
+                "modo": "bot" if info.get("rival_tipo") == "bot" else "jugador_ia", "resultado": h["resultado"],
+                "goles": h["goles"], "delta": h["delta"], "copas": h["copas"], "cancha": h["cancha"],
+                "duracion": round(_time.time() - info["inicio"]) if info.get("inicio") else None})
+        return _renders_pausa(r)
     except (ErrorJuego, KeyError, TypeError, ValueError) as e:
         return error_json(e)
 
@@ -142,7 +155,7 @@ def ver_partido(request: Request, partido_id: int, p: Partida = P):
                  marcador=[partido["goles_local"], partido["goles_visita"]],
                  equipos=[{"formacion": a["formacion"], "jugadores": [j["nombre"] for j in a["titulares"]]}
                           for a in detalle.get("alineaciones", [])])
-    return pagina(request, "partido.html", p, partido=datos, datos=json.dumps(datos, ensure_ascii=False))
+    return pagina(request, _plantilla_partido(request), p, partido=datos, datos=json.dumps(datos, ensure_ascii=False))
 
 
 @router.get("/partido/{partido_id}/resumen", response_class=HTMLResponse)
@@ -156,3 +169,8 @@ def resumen_partido(request: Request, partido_id: int, p: Partida = P):
              if x["id"] != partido_id]
     refrescar_escudos(p)
     return plantillas.TemplateResponse(request, "_resumen.html", {"partido": partido, "detalle": detalle, "otros": otros})
+
+
+def _plantilla_partido(request: Request) -> str:
+    """Pantalla nueva (Preact, módulos en /static/partido/); ?pantalla=vieja abre la anterior por si algo falla."""
+    return "partido_v1.html" if request.query_params.get("pantalla") == "vieja" else "partido.html"

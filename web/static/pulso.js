@@ -70,7 +70,7 @@ window.FGM_PULSO = (() => {
     const esquinas = [[0.12, 0.25], [0.88, 0.25], [0.12, 0.72], [0.88, 0.72], [0.5, 0.22]];
     const [ox, oy] = esquinas[Math.floor(Math.random() * esquinas.length)];
     cont.innerHTML = `<div class="g-caja">
-        <p class="g-ayuda">🎯 Toca cuando la mira esté sobre el objetivo</p>
+        <p class="g-ayuda">Toca cuando la mira esté sobre el objetivo</p>
         <div class="g-arco"><i class="g-obj" style="left:${ox * 100}%;top:${oy * 100}%;width:${r * 200}%;"></i><i class="g-mira">+</i></div>
         <button class="primario bt-ya">¡Patea!</button></div>`;
     const mira = cont.querySelector('.g-mira'), st = nuevoEstado();
@@ -107,7 +107,7 @@ window.FGM_PULSO = (() => {
   function companero(cont, zona, alListo, limite = 5) {
     const ventana = 420 + limitar(zona || 0.12, 0.07, 0.28) * 1600;   // ms que queda libre
     cont.innerHTML = `<div class="g-caja">
-        <p class="g-ayuda">🤝 Toca al compañero cuando quede libre (verde)</p>
+        <p class="g-ayuda">Toca al compañero cuando quede libre (verde)</p>
         <div class="g-companeros">${[0, 1, 2, 3].map(i => `<button class="g-comp" data-i="${i}">${i + 1}</button>`).join('')}</div></div>`;
     const st = nuevoEstado(), botones = [...cont.querySelectorAll('.g-comp')];
     let libre = -1, desde = 0, timers = [];
@@ -143,11 +143,11 @@ window.FGM_PULSO = (() => {
 
   // --- secuencia: el amague; repite las flechas en orden y rápido
   function secuencia(cont, zona, alListo) {
-    const FL = {izq: '⬅', arr: '⬆', der: '➡'};
+    const FL = {izq: FGM_ICO('arrow-left'), arr: FGM_ICO('arrow-up'), der: FGM_ICO('arrow-right')};
     const pasos = Array.from({length: 3}, () => ['izq', 'arr', 'der'][Math.floor(Math.random() * 3)]);
     const limite = 2.4 + limitar(zona || 0.12, 0.07, 0.28) * 8;        // segundos (3 a 4,6)
     cont.innerHTML = `<div class="g-caja">
-        <p class="g-ayuda">🪄 Repite el amague: ${pasos.map(p => `<b class="g-paso">${FL[p]}</b>`).join(' ')}</p>
+        <p class="g-ayuda">Repite el amague: ${pasos.map(p => `<b class="g-paso">${FL[p]}</b>`).join(' ')}</p>
         <div class="g-tiempo"><i></i></div>
         <div class="g-flechas">${Object.entries(FL).map(([k, f]) => `<button data-f="${k}">${f}</button>`).join('')}</div></div>`;
     const st = nuevoEstado(), marcas = [...cont.querySelectorAll('.g-paso')];
@@ -183,12 +183,12 @@ window.FGM_PULSO = (() => {
     const ventana = 380 + limitar(zona || 0.12, 0.07, 0.28) * 1700;   // ms para reaccionar bien
     const lado = Math.random() < 0.5 ? 'izq' : 'der';
     cont.innerHTML = `<div class="g-caja">
-        <p class="g-ayuda">🧤 Espera la señal y lánzate hacia ese lado</p>
+        <p class="g-ayuda">Espera la señal y lánzate hacia ese lado</p>
         <div class="g-senal">…</div>
-        <div class="g-lados"><button data-l="izq">⬅ Izquierda</button><button data-l="der">Derecha ➡</button></div></div>`;
+        <div class="g-lados"><button data-l="izq">${FGM_ICO('arrow-left')} Izquierda</button><button data-l="der">Derecha ${FGM_ICO('arrow-right')}</button></div></div>`;
     const st = nuevoEstado(), senal = cont.querySelector('.g-senal');
     let desde = 0;
-    const t1 = setTimeout(() => { if (st.hecho) return; desde = performance.now(); senal.textContent = lado === 'izq' ? '⬅' : '➡'; senal.classList.add('ya'); }, 700 + Math.random() * 1300);
+    const t1 = setTimeout(() => { if (st.hecho) return; desde = performance.now(); senal.innerHTML = FGM_ICO(lado === 'izq' ? 'arrow-left' : 'arrow-right'); senal.classList.add('ya'); }, 700 + Math.random() * 1300);
     const t2 = setTimeout(() => parar(null, true), 5000);
     st.limpiar.push(() => { clearTimeout(t1); clearTimeout(t2); });
     function parar(l, tarde = false) {
@@ -209,7 +209,7 @@ window.FGM_PULSO = (() => {
 
   const GESTOS = {
     barra: (c, z, ok) => barraTiempo(c, z, ok),
-    rapida: (c, z, ok) => barraTiempo(c, z, ok, 3.2, {vel: 2.1, ayuda: '🦵 ¡Rápido! Toca en el verde'}),
+    rapida: (c, z, ok) => barraTiempo(c, z, ok, 3.2, {vel: 2.1, ayuda: '¡Rápido! Toca en el verde'}),
     apuntar, companero, secuencia, reaccion,
   };
   function gesto(nombre, cont, zona, alListo) {
@@ -226,7 +226,7 @@ window.FGM_PULSO = (() => {
     const miGesto = mio ? prep.gesto_ataque : prep.gesto_defensa;
     cont.innerHTML = `
       <div class="pulso${prep.decisivo ? ' decisivo' : ''}">
-        ${prep.decisivo ? '<p class="pu-decisivo">🔥 MOMENTO DECISIVO · cada toque pesa más</p>' : ''}
+        ${prep.decisivo ? '<p class="pu-decisivo">MOMENTO DECISIVO · cada toque pesa más</p>' : ''}
         <div class="pu-duelo"><span class="pu-yo">${esc(yo.nombre)} <b>${esc(yo.stat)} ${yo.valor}</b></span><i>vs</i><span class="pu-el"><b>${esc(el.stat)} ${el.valor}</b> ${esc(el.nombre)}</span></div>
         <div class="pu-barra"><i class="pu-mia"></i><b class="pu-medio"></b><em class="pu-pct"></em></div>
         <p class="pu-ronda tenue"></p>
@@ -265,7 +265,7 @@ window.FGM_PULSO = (() => {
         await espera(650);
       }
       const gane = barra >= 0.5;
-      cont.querySelector('.pu-toque').innerHTML = `<p class="pu-fin ${gane ? 'ok' : 'mal'}">${gane ? '💪 ¡Ganaste el pulso!' : '😖 Perdiste el pulso'}</p>`;
+      cont.querySelector('.pu-toque').innerHTML = `<p class="pu-fin ${gane ? 'ok' : 'mal'}">${gane ? '¡Ganaste el pulso!' : 'Perdiste el pulso'}</p>`;
       if (gane) S.uy(); else S.abucheo();
       await espera(900);
       resolver(misToques);

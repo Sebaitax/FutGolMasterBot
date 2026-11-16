@@ -63,7 +63,7 @@
   <h3>Goleadores</h3>
   <ul class="lista">
     {% for g in goleadores %}
-    <li class="{{ 'usuario' if g.es_usuario }}"><span>{{ loop.index }}. {{ escudo(g.equipo, "chico") }} {{ g.alias or g.nombre }} <small class="tenue">{{ g.equipo }}</small></span><span>{{ g.goles }} ⚽</span></li>
+    <li class="{{ 'usuario' if g.es_usuario }}"><span>{{ loop.index }}. {{ escudo(g.equipo, "chico") }} {{ g.alias or g.nombre }} <small class="tenue">{{ g.equipo }}</small></span><span>{{ g.goles }} {{ ico('pelota') }}</span></li>
     {% else %}
     <li class="tenue">Todavía no hay goles.</li>
     {% endfor %}

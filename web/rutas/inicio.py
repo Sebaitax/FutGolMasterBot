@@ -1,6 +1,7 @@
 """Inicio y escalera de copas: crear el club, buscar partido por copas y sobres por tiempo."""
 import json
 import random
+import time as _time
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from juego import escalera as ESC
@@ -8,6 +9,7 @@ from juego.partida import ErrorJuego, Partida
 from web import bitacora
 from web.comun import BD, P, PRINCIPAL, _carta_json, _leer_partida, _yo, error_json, ir, pagina, sincronizar_liga
 from web.rutas.imagenes import _png
+from web.rutas.vivo import SALA
 
 router = APIRouter()
 
@@ -51,23 +53,52 @@ def _jugadores_escalera(yo: str) -> list[dict]:
     return salida
 
 
-def _buscar_rival(yo: str, mis_copas: int) -> dict | None:
-    """Un jugador real con copas parecidas (la mitad de las veces, si hay); si no, None = bot de tu cancha."""
-    cerca = [j for j in _jugadores_escalera(yo) if abs(j["copas"] - mis_copas) <= 300]
-    if not cerca or random.random() < 0.5:
-        return None
-    cerca.sort(key=lambda j: abs(j["copas"] - mis_copas))
-    elegido = random.choice(cerca[:3])
-    otra = _leer_partida(elegido["pid"])
-    if not otra:
-        return None
-    try:
-        datos = otra.exportar_equipo()
-    finally:
-        otra.con.close()
+BUSCAR_ONLINE = (5, 7)   # segundos (al azar) buscando rival online; después, un bot de tu cancha (sin avisar)
+
+
+@router.get("/escalera/buscar", response_class=HTMLResponse)
+def buscar_partido(request: Request, p: Partida = P):
+    """Pantalla de búsqueda: primero un rival online (otro jugador buscando a la vez); si no hay, un bot."""
+    if not p.existe:
+        return ir("/")
+    if p.partido_en_vivo():
+        return ir(f"/partido/{p.partido_en_vivo()['partido']}/vivo")
+    return pagina(request, "buscar.html", p, segundos=random.randint(*BUSCAR_ONLINE), cancha=p.info_cancha())
+
+
+_buscando_desde: dict[str, float] = {}
+
+
+@router.post("/api/escalera/buscar")
+def api_buscar_partido(request: Request, p: Partida = P):
+    if not p.existe:
+        return error_json(ErrorJuego("Primero crea tu club."))
+    datos = p.exportar_equipo()
     if len(datos["jugadores"]) < 11:
-        return None
-    return {"pid": elegido["pid"], "copas": elegido["copas"], "datos": datos}
+        return error_json(ErrorJuego("Necesitas al menos 11 jugadores."))
+    yo = _yo(request)
+    _buscando_desde.setdefault(yo, _time.time())
+    mid = SALA.buscar_copas(yo, p.copas, datos)
+    if mid:
+        bitacora.anotar("metrica", "busqueda", detalle={"resultado": "online",
+                                                        "espera": round(_time.time() - _buscando_desde.pop(yo, _time.time()), 1)})
+        SALA.guardar(SALA.partido(mid), forzar=True)
+        bitacora.anotar("juego", "partido por copas online encontrado", detalle={"partido": mid, "copas": p.copas})
+    return {"partido": mid}
+
+
+@router.post("/api/escalera/cancelar")
+async def api_cancelar_busqueda(request: Request):
+    yo = _yo(request)
+    mid = SALA.cancelar_busqueda(yo)
+    try:
+        motivo = (await request.json()).get("motivo", "tiempo")
+    except Exception:
+        motivo = "salio"
+    bitacora.anotar("metrica", "busqueda", detalle={
+        "resultado": "online" if mid else "bot" if motivo == "tiempo" else "cancelada",
+        "espera": round(_time.time() - _buscando_desde.pop(yo, _time.time()), 1)})
+    return {"ok": True, "partido": mid}
 
 
 @router.post("/escalera/jugar")
@@ -77,7 +108,8 @@ def jugar_escalera(request: Request, modo: str = Form("vivo"), p: Partida = P):
     if p.partido_en_vivo():
         return ir(f"/partido/{p.partido_en_vivo()['partido']}/vivo")
     modo = "vivo"   # juego online: los partidos por copas se juegan siempre en vivo (sin simular ni acelerar)
-    rival = _buscar_rival(_yo(request), p.copas)
+    # sin rival online en vivo: siempre un bot de tu cancha (nunca el equipo de alguien que no está conectado)
+    rival = None
     try:
         pid = p.iniciar_escalera(rival, en_vivo=modo != "rapido")
     except ErrorJuego as e:
@@ -95,8 +127,10 @@ def api_sobre_tiempo(sobre_id: int, accion: str, p: Partida = P):
         if accion in ("abrir", "abrir-ya"):
             fichas = p.abrir_sobre_tiempo(sobre_id, pagar=accion == "abrir-ya")
             copias = p.copias()
-            cartas = [_carta_json(f.carta, pid=f.pid, repetida=len(copias.get(f.carta_id, [])) > 1) for f in fichas]
-            bitacora.anotar("juego", f"sobre por tiempo ({accion})", detalle={"cartas": len(cartas)})
+            cartas = [_carta_json(f.carta, pid=f.pid, repetida=len(copias.get(f.carta_id, [])) > 1,
+                                  calidad=p.calidades.get(f.pid, "normal")) for f in fichas]
+            bitacora.anotar("metrica", "sobre", detalle={"origen": "tiempo", "abrir_ya": accion == "abrir-ya",
+                                                         "calidades": _contar_calidades(cartas)})
             return {"cartas": cartas, "sobres": p.sobres_tiempo(), "monedas": p.monedas}
     except ErrorJuego as e:
         return error_json(e)
@@ -107,6 +141,7 @@ def api_sobre_tiempo(sobre_id: int, accion: str, p: Partida = P):
 def crear(nombre_club: str = Form(...), pais: str = Form(ESC.PAIS_DEFECTO), p: Partida = P):
     try:
         p.crear(nombre_club, pais=pais)
+        bitacora.anotar("metrica", "club_creado", detalle={"pais": pais})
     except (ErrorJuego, FileNotFoundError) as e:
         return ir("/", error=str(e))
     return ir("/plantel", aviso="¡Club creado! Arma tu once y sal a jugar a la Cancha del Barrio.")
@@ -146,3 +181,10 @@ def nueva_temporada(p: Partida = P):
     except ErrorJuego as e:
         return ir("/", error=str(e))
     return ir("/", aviso="Nueva temporada. ¡Suerte!")
+
+
+def _contar_calidades(cartas: list[dict]) -> dict:
+    cuenta: dict[str, int] = {}
+    for c in cartas:
+        cuenta[c.get("calidad", "normal")] = cuenta.get(c.get("calidad", "normal"), 0) + 1
+    return cuenta

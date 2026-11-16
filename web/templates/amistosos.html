@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block contenido %}
 <section class="tarjeta">
-  <h2>⚔️ Amistosos</h2>
-  <p class="tenue">Juega contra cualquier club, de cualquier división. Los amistosos no cuentan para la tabla, no dan premio y no dejan lesiones ni suspensiones: sirven para probar tu once y tus tácticas. Tu media: <b>{{ "%.1f"|format(mi_fuerza) }}</b>.</p>
+  <h2>Amistosos</h2>
+  <p class="tenue">Juega contra tus amigos o contra clubes reales. Los amistosos no dan copas ni premios y no dejan lesiones ni suspensiones: sirven para probar tu once y tus tácticas. Tu media: <b>{{ "%.1f"|format(mi_fuerza) }}</b>.</p>
   <div class="local-visita">
     <label><input type="radio" name="lado" value="1" checked> Jugar de local ({{ club }})</label>
     <label><input type="radio" name="lado" value="0"> Jugar de visita</label>
@@ -10,14 +10,14 @@
 </section>
 
 <section class="tarjeta vivo-cta">
-  <h3>⚡ En vivo contra un amigo</h3>
+  <h3>En vivo contra un amigo</h3>
   <p class="tenue">Los dos juegan al mismo tiempo: tácticas que se contrarrestan y jugadas clave a pulso.
-    {% if esperando_vivo %}<b class="vs-espera">🟢 {{ esperando_vivo|join(", ") }} {{ "está" if esperando_vivo|length == 1 else "están" }} esperando rival</b>{% endif %}</p>
-  <a class="boton primario" href="/vivo">⚡ Ir a la sala en vivo</a>
+    {% if esperando_vivo %}<b class="vs-espera">{{ ico('punto-verde') }} {{ esperando_vivo|join(", ") }} {{ "está" if esperando_vivo|length == 1 else "están" }} esperando rival</b>{% endif %}</p>
+  <a class="boton primario" href="/vivo">Ir a la sala en vivo</a>
 </section>
 
 <section class="tarjeta amigos">
-  <h3>👥 Desafía a la plantilla de tus amigos</h3>
+  <h3>Desafía a la plantilla de tus amigos</h3>
   <p class="tenue">Juegas en vivo contra el club de tu amigo tal como lo tiene armado ahora (su once, sus suplentes y sus mejoras). No necesita estar conectado: el resultado también le aparece en esta página.</p>
   {% if amigos %}
   <div class="rivales">
@@ -27,17 +27,17 @@
       <input type="hidden" name="de_local" value="1" class="campo-lado">
       <img class="escudo grande" src="/escudo/amigo/{{ a.pid }}?v={{ a.escudo|length }}" alt="">
       <strong>{{ a.nombre }}</strong>
-      <small class="tenue">{{ a.division }} · 🏟️ {{ a.estadio }}</small>
+      <small class="tenue">{{ a.division }} · {{ ico('estadio') }} {{ a.estadio }}</small>
       <small>Media <b>{{ "%.1f"|format(a.fuerza) }}</b> ·
         {% if dif > 3 %}<span class="bien">fácil</span>{% elif dif < -3 %}<span class="mal">difícil</span>{% else %}<span class="medio">parejo</span>{% endif %}</small>
       {% if a.record.g + a.record.e + a.record.p %}<small class="tenue">Entre ustedes: {{ a.record.g }}G {{ a.record.e }}E {{ a.record.p }}P</small>{% endif %}
-      <button class="primario">⚔️ Desafiar</button>
-      <a class="enlace" href="/amigo/{{ a.pid }}">👀 Ver plantilla</a>
+      <button class="primario">{{ ico('swords') }} Desafiar</button>
+      <a class="enlace" href="/amigo/{{ a.pid }}">Ver plantilla</a>
     </form>
     {% endfor %}
   </div>
   {% else %}
-  <p class="tenue">Todavía no hay otros clubes. Pásale el link a tus amigos: cuando creen su club, aparecen acá.</p>
+  <div class="vacio-ilus"><img src="/static/logo/vacio-amigos.webp" alt="" width="160" height="160" loading="lazy"><p><b>Todavía no hay otros clubes.</b><br>Pásale el link a tus amigos: cuando creen su club, aparecen acá.</p></div>
   {% endif %}
 
   {% if desafios %}
@@ -50,7 +50,7 @@
         {% if d.yo_desafie %}Desafiaste a <b>{{ d.otro_club }}</b>{% else %}<b>{{ d.otro_club }}</b> te desafió{% endif %}
         {% if d.nuevo %}<em class="d-nuevo">nuevo</em>{% endif %}
         {% if d.mis_goleadores or d.sus_goleadores %}<br><small class="tenue">
-          {% if d.mis_goleadores %}⚽ {{ d.mis_goleadores|join(', ') }}{% endif %}
+          {% if d.mis_goleadores %}{{ ico('pelota') }} {{ d.mis_goleadores|join(', ') }}{% endif %}
           {% if d.sus_goleadores %}{{ ' · ' if d.mis_goleadores }}ellos: {{ d.sus_goleadores|join(', ') }}{% endif %}</small>{% endif %}
       </span>
       <b class="d-marcador">{{ d.mios }} - {{ d.suyos }}</b>
@@ -62,7 +62,7 @@
 
 {% for d in divisiones %}
 <section class="tarjeta">
-  <h3><span class="div-badge {{ d.clave }}">{{ d.nombre }}</span></h3>
+  <h3>{{ {'bronce': 'Clubes reales · nivel bajo', 'plata': 'Clubes reales · nivel medio', 'oro': 'Clubes reales · nivel alto'}.get(d.clave, 'Clubes reales') }}</h3>
   <div class="rivales">
     {% for c in d.clubes %}
     {% set dif = mi_fuerza - c.fuerza %}
@@ -70,10 +70,10 @@
       <input type="hidden" name="de_local" value="1" class="campo-lado">
       {{ escudo(c.nombre, "grande") }}
       <strong>{{ c.nombre }}</strong>
-      <small class="tenue">🏟️ {{ c.estadio }}</small>
+      <small class="tenue">{{ ico('estadio') }} {{ c.estadio }}</small>
       <small>Media <b>{{ "%.1f"|format(c.fuerza) }}</b> ·
         {% if dif > 3 %}<span class="bien">fácil</span>{% elif dif < -3 %}<span class="mal">difícil</span>{% else %}<span class="medio">parejo</span>{% endif %}</small>
-      <button class="primario">▶ Jugar</button>
+      <button class="primario">Jugar</button>
     </form>
     {% endfor %}
   </div>

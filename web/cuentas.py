@@ -47,6 +47,14 @@ CREATE TABLE IF NOT EXISTS sesiones (
     dispositivo TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS sesiones_usuario ON sesiones (usuario_id);
+-- links para cambiar la contraseña (un solo uso, 24 h); se guarda el hash del token
+CREATE TABLE IF NOT EXISTS restablecer (
+    token_hash TEXT PRIMARY KEY,
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    expira REAL NOT NULL
+);
+-- quién pidió recuperar su contraseña (para que el administrador le mande el link)
+CREATE TABLE IF NOT EXISTS pedidos_restablecer (email TEXT PRIMARY KEY, pedido REAL NOT NULL);
 """
 
 
@@ -210,6 +218,95 @@ def lista() -> list[dict]:
         return [_publico(f) for f in con.execute("SELECT * FROM usuarios ORDER BY ultimo_ingreso DESC")]
     finally:
         con.close()
+
+
+# ------------------------------------------------------------------ recuperar la contraseña
+
+HORAS_LINK = 24
+
+
+def crear_link(email: str) -> str | None:
+    """Token de un solo uso para cambiar la contraseña (None si el correo no tiene cuenta)."""
+    email = (email or "").strip().lower()
+    con = conectar()
+    try:
+        fila = con.execute("SELECT id FROM usuarios WHERE email = ?", (email,)).fetchone()
+        if not fila:
+            return None
+        token = secrets.token_urlsafe(32)
+        con.execute("DELETE FROM restablecer WHERE usuario_id = ? OR expira < ?", (fila["id"], time.time()))
+        con.execute("INSERT INTO restablecer VALUES (?, ?, ?)", (_h(token), fila["id"], time.time() + HORAS_LINK * 3600))
+        con.execute("DELETE FROM pedidos_restablecer WHERE email = ?", (email,))
+        con.commit()
+        return token
+    finally:
+        con.close()
+
+
+def usuario_del_link(token: str) -> dict | None:
+    con = conectar()
+    try:
+        return _publico(con.execute(
+            "SELECT u.* FROM restablecer r JOIN usuarios u ON u.id = r.usuario_id WHERE r.token_hash = ? AND r.expira > ?",
+            (_h(token or ""), time.time())).fetchone())
+    finally:
+        con.close()
+
+
+def cambiar_clave(token: str, clave: str) -> dict:
+    if len(clave or "") < MIN_CLAVE:
+        raise ErrorCuenta(f"La contraseña debe tener al menos {MIN_CLAVE} caracteres.")
+    usuario = usuario_del_link(token)
+    if not usuario:
+        raise ErrorCuenta("El link venció o ya se usó. Pide uno nuevo.")
+    con = conectar()
+    try:
+        con.execute("UPDATE usuarios SET clave = ? WHERE id = ?", (_hash(clave), usuario["id"]))
+        con.execute("DELETE FROM restablecer WHERE usuario_id = ?", (usuario["id"],))
+        con.execute("DELETE FROM sesiones WHERE usuario_id = ?", (usuario["id"],))   # se cierran las sesiones viejas
+        con.commit()
+        return usuario
+    finally:
+        con.close()
+
+
+def anotar_pedido(email: str):
+    email = (email or "").strip().lower()[:120]
+    con = conectar()
+    try:
+        if con.execute("SELECT 1 FROM usuarios WHERE email = ?", (email,)).fetchone():
+            con.execute("INSERT OR REPLACE INTO pedidos_restablecer VALUES (?, ?)", (email, time.time()))
+            con.commit()
+    finally:
+        con.close()
+
+
+def pedidos() -> dict[str, float]:
+    con = conectar()
+    try:
+        return {r["email"]: r["pedido"] for r in con.execute("SELECT * FROM pedidos_restablecer")}
+    finally:
+        con.close()
+
+
+def correo_activo() -> bool:
+    return bool(os.environ.get("FGM_SMTP_HOST") and os.environ.get("FGM_SMTP_USUARIO") and os.environ.get("FGM_SMTP_CLAVE"))
+
+
+def enviar_link(email: str, link: str):
+    """Manda el link por correo (SMTP con TLS; p. ej. Gmail con una contraseña de aplicación)."""
+    import smtplib
+    from email.message import EmailMessage
+    m = EmailMessage()
+    m["Subject"] = "FutGolMaster: cambia tu contraseña"
+    m["From"] = os.environ.get("FGM_SMTP_DE") or os.environ["FGM_SMTP_USUARIO"]
+    m["To"] = email
+    m.set_content(f"Hola,\n\nPara elegir una contraseña nueva entra a este link (vale {HORAS_LINK} horas y sirve una vez):\n\n"
+                  f"{link}\n\nSi no lo pediste, ignora este correo.\n\nFutGolMaster")
+    with smtplib.SMTP(os.environ["FGM_SMTP_HOST"], int(os.environ.get("FGM_SMTP_PUERTO", 587)), timeout=20) as s:
+        s.starttls()
+        s.login(os.environ["FGM_SMTP_USUARIO"], os.environ["FGM_SMTP_CLAVE"])
+        s.send_message(m)
 
 
 # ------------------------------------------------------------------ Google (OpenID Connect)

@@ -5,7 +5,7 @@ import time as _time
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from urllib.parse import urlencode
-from web import bitacora
+from web import bitacora, cuentas
 from web.comun import _es_la_pc, _nombre_club
 
 router = APIRouter()
@@ -30,8 +30,8 @@ async def api_log(request: Request):
         return {"ok": False}
     if not isinstance(d, dict):
         return {"ok": False}
-    bitacora.anotar("js", str(d.get("mensaje", ""))[:1000], "error" if d.get("tipo") != "api" else "aviso",
-                    detalle={k: str(d.get(k, ""))[:4000] for k in ("pagina", "fuente", "linea", "pila", "tipo", "url", "estado")},
+    bitacora.anotar("js", str(d.get("mensaje", ""))[:1000], "error" if d.get("tipo") not in ("api", "aviso") else "aviso",
+                    detalle={k: str(d.get(k, ""))[:4000] for k in ("pagina", "fuente", "linea", "pila", "tipo", "url", "estado", "datos")},
                     ruta=str(d.get("pagina", ""))[:300])
     return {"ok": True}
 
@@ -48,6 +48,24 @@ def admin_logs(request: Request, horas: float = 24, pid: str = "", nivel: str = 
     fecha = lambda ts: _time.strftime("%d/%m %H:%M:%S", _time.localtime(ts))
     link = lambda **k: "?" + urlencode({"horas": horas, "pid": pid, "nivel": nivel, "tipo": tipo, **k})
     t = r["totales"]
+    met = bitacora.metricas(horas)
+    pedidos = cuentas.pedidos()
+    filas_c = "".join(
+        f"<tr><td>{e(u['email'])}</td><td>{_time.strftime('%d/%m %H:%M', _time.localtime(u['ultimo_ingreso'])) if u.get('ultimo_ingreso') else '—'}</td>"
+        f"<td>{'pidió recuperar' if u['email'] in pedidos else ''}</td><td><form method='post' action='/admin/restablecer' style='margin:0'>"
+        f"<input type='hidden' name='email' value='{e(u['email'])}'><button>Generar link</button></form></td></tr>"
+        for u in sorted(cuentas.lista(), key=lambda u: (u['email'] not in pedidos, u['email'])))
+    fila_m = lambda etiqueta, valor: f"<tr><td>{etiqueta}</td><td><b>{valor}</b></td></tr>"
+    partidos = "".join(fila_m(f"Partidos {e(x['modo'] or '?')}", f"{x['n']} · {x['victorias'] or 0}G/{x['derrotas'] or 0}P · {x['duracion'] or '?'} s promedio")
+                       for x in met.get("partidos", []))
+    busquedas = "".join(fila_m(f"Búsquedas → {e(x['resultado'] or '?')}", f"{x['n']} · espera {x['espera']} s") for x in met.get("busquedas", []))
+    sob = met.get("sobres") or {}
+    tabla_metricas = (fila_m("Jugadores activos", met.get("activos", 0)) + fila_m("Cuentas nuevas", met.get("cuentas_nuevas", 0))
+                      + fila_m("Clubes creados", met.get("clubes_nuevos", 0)) + partidos + busquedas
+                      + fila_m("Sobres abiertos", f"{sob.get('n', 0)} · estrellas {sob.get('estrellas', 0)} · cracks {sob.get('cracks', 0)}")
+                      + fila_m("Errores (servidor + navegador)", f"{met.get('errores', 0)} · JS {met.get('errores_js', 0)}")
+                      + fila_m("Posibles pegados / reconexiones", f"{met.get('pegados', 0)} / {met.get('reconexiones', 0)}")
+                      + fila_m("Sospechas de trampa", met.get("trampas", 0)))
     filas_j = "".join(
         f"<tr><td><a href='{link(pid=j['pid'])}'>{e(club(j['pid']) or j['pid'][:8])}</a></td><td>{j['n']}</td>"
         f"<td class='{'malo' if j['errores'] else ''}'>{j['errores'] or 0}</td><td>{j['avisos'] or 0}</td>"
@@ -73,11 +91,13 @@ table{{border-collapse:collapse;width:100%;font-size:12.5px}} td,th{{border-bott
 .malo,.error td:first-child{{color:#ff7b6b;font-weight:700}} tr.aviso td:first-child{{color:#f3c74b}}
 pre{{white-space:pre-wrap;max-width:900px;font-size:11.5px;background:#18211b;padding:8px}} .caja{{overflow-x:auto}}
 .tot b{{font-size:1.3em;margin-right:14px}}</style></head><body>
-<h1>🗒️ Bitácora privada</h1>
+<h1>Bitácora privada</h1>
 <p class="tot">Últimas {horas:g} h{' · jugador ' + e(club(pid) or pid) if pid else ''}{' · ' + e(nivel) if nivel else ''}{' · ' + e(tipo) if tipo else ''}:
 <b>{t.get('eventos') or 0}</b> eventos <b class="malo">{t.get('errores') or 0}</b> errores <b>{t.get('avisos') or 0}</b> avisos <b>{t.get('jugadores') or 0}</b> jugadores</p>
 <p>{filtros} · <a href="/admin/logs">limpiar filtros</a></p>
-<h2>Problemas más repetidos</h2><div class="caja"><table><tr><th>tipo</th><th>veces</th><th>jugadores</th><th>ruta</th><th>mensaje</th><th>último</th></tr>{filas_e or '<tr><td colspan=6>Nada 🎉</td></tr>'}</table></div>
+<h2>Cuentas ({len(cuentas.lista())})</h2><div class="caja"><table><tr><th>correo</th><th>último ingreso</th><th></th><th>contraseña</th></tr>{filas_c}</table></div>
+<h2>Métricas</h2><div class="caja"><table>{tabla_metricas}</table></div>
+<h2>Problemas más repetidos</h2><div class="caja"><table><tr><th>tipo</th><th>veces</th><th>jugadores</th><th>ruta</th><th>mensaje</th><th>último</th></tr>{filas_e or '<tr><td colspan=6>Nada</td></tr>'}</table></div>
 <h2>Jugadores</h2><div class="caja"><table><tr><th>club</th><th>eventos</th><th>errores</th><th>avisos</th><th>dispositivo</th><th>país</th><th>última vez</th></tr>{filas_j}</table></div>
 <h2>Respuestas lentas (≥ {bitacora.LENTO_MS} ms)</h2><div class="caja"><table><tr><th>ruta</th><th>veces</th><th>promedio</th><th>máx</th></tr>{filas_l or '<tr><td colspan=4>Ninguna</td></tr>'}</table></div>
 <h2>Últimos eventos</h2><div class="caja"><table><tr><th>hora</th><th>club</th><th>tipo</th><th>ruta</th><th>estado</th><th>ms</th><th>mensaje</th></tr>{filas_ev}</table></div>

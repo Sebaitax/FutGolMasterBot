@@ -1,4 +1,6 @@
 """Cuentas: entrar con correo y contraseña o con Google, registrarse y salir."""
+import os
+import html
 import re
 import secrets
 import time as _time
@@ -11,7 +13,7 @@ router = APIRouter()
 
 # ------------------------------------------------------------------ cuentas: correo + contraseña o Google
 
-PUBLICAS = ("/entrar", "/registro", "/salir", "/auth/", "/static", "/fuentes", "/favicon", "/api/log")
+PUBLICAS = ("/entrar", "/registro", "/salir", "/auth/", "/olvide", "/restablecer/", "/static", "/fuentes", "/favicon", "/api/log")
 _intentos: dict[str, list[float]] = {}
 
 
@@ -110,8 +112,74 @@ def volver_a_mi_partida(pid: str):
     if cuentas.login_obligatorio():
         return ir("/entrar")
     if not re.fullmatch(r"[0-9a-f]{32}", pid) or not ruta_de(pid).is_file():
-        return HTMLResponse("<h1>No encontré esa partida 🤔</h1><p>Revisa el link. <a href='/'>Ir al inicio</a></p>", status_code=404)
+        return HTMLResponse("<h1>No encontré esa partida</h1><p>Revisa el link. <a href='/'>Ir al inicio</a></p>", status_code=404)
     bitacora.anotar("juego", "volvió a su partida con el link personal", pid=pid)
     respuesta = RedirectResponse("/", status_code=303)
     respuesta.set_cookie(COOKIE_PARTIDA, pid, max_age=10 * 365 * 86400, samesite="lax", httponly=True)
     return respuesta
+
+
+# ------------------------------------------------------------------ recuperar la contraseña
+
+def _link(request: Request, token: str) -> str:
+    base = os.environ.get("FGM_URL_BASE") or str(request.base_url).rstrip("/")
+    return f"{base.rstrip('/')}/restablecer/{token}"
+
+
+@router.get("/olvide", response_class=HTMLResponse)
+def ver_olvide(request: Request):
+    return pagina(request, "clave.html", modo="pedir", correo=cuentas.correo_activo())
+
+
+@router.post("/olvide", response_class=HTMLResponse)
+def pedir_link(request: Request, email: str = Form("")):
+    if _demasiados_intentos(request):
+        return ir("/olvide", error="Demasiados intentos. Espera unos minutos.")
+    email = email.strip().lower()
+    if cuentas.correo_activo():
+        token = cuentas.crear_link(email)
+        if token:   # no se avisa si el correo existe o no (para no revelar cuentas)
+            try:
+                cuentas.enviar_link(email, _link(request, token))
+            except Exception as e:
+                bitacora.anotar("cuenta", f"no se pudo mandar el correo: {type(e).__name__}: {e}", "error")
+    else:
+        cuentas.anotar_pedido(email)
+    bitacora.anotar("cuenta", "pidió recuperar la contraseña", "aviso", detalle={"email": email[:3] + "…"})
+    return pagina(request, "clave.html", modo="enviado", correo=cuentas.correo_activo())
+
+
+@router.get("/restablecer/{token}", response_class=HTMLResponse)
+def ver_restablecer(request: Request, token: str):
+    usuario = cuentas.usuario_del_link(token)
+    return pagina(request, "clave.html", modo="nueva" if usuario else "vencido", email=usuario and usuario["email"])
+
+
+@router.post("/restablecer/{token}")
+def hacer_restablecer(request: Request, token: str, clave: str = Form(""), clave2: str = Form("")):
+    if clave != clave2:
+        return ir(f"/restablecer/{token}", error="Las contraseñas no coinciden.")
+    try:
+        usuario = cuentas.cambiar_clave(token, clave)
+    except cuentas.ErrorCuenta as e:
+        return ir(f"/restablecer/{token}", error=str(e))
+    bitacora.anotar("cuenta", "cambió su contraseña con el link", pid=usuario["pid"])
+    return _con_sesion(request, usuario)
+
+
+@router.post("/admin/restablecer", response_class=HTMLResponse)
+def admin_link(request: Request, email: str = Form("")):
+    """El administrador genera el link para alguien que pidió recuperar su contraseña (y se lo manda por WhatsApp)."""
+    usuario = getattr(request.state, "usuario", None)
+    if not (usuario and usuario["admin"]):
+        return HTMLResponse("No encontrado", status_code=404)
+    token = cuentas.crear_link(email)
+    if not token:
+        return HTMLResponse("<p>No existe una cuenta con ese correo. <a href='/admin/logs'>Volver</a></p>", status_code=404)
+    link = html.escape(_link(request, token))
+    return HTMLResponse(f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<body style="font-family:system-ui;background:#0f1512;color:#e8eee9;padding:20px">
+<h2>Link para {html.escape(email)}</h2><p>Mándaselo (vale {cuentas.HORAS_LINK} h y sirve una vez):</p>
+<p><input value="{link}" style="width:100%;padding:10px;font-size:1rem" onclick="this.select()" readonly></p>
+<button onclick="navigator.clipboard.writeText('{link}');this.textContent='¡Copiado!'" style="padding:10px 16px">Copiar</button>
+<p><a href="/admin/logs" style="color:#2fbf71">← Volver</a></p></body>""")

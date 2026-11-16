@@ -144,3 +144,262 @@
 .sobre-arte.super, .ap-sobre.super { background: linear-gradient(160deg, #cfe2ff, #3d8bff 50%, #163f8a); color: #fff; }
 .sobre-arte.premium, .ap-sobre.premium { background: linear-gradient(160deg, #fff1b8, #c06cff 45%, #3d1470); color: #fff;
   box-shadow: 0 0 18px rgba(192, 108, 255, .5); }
+
+/* marcador del partido: hueco fijo + versión compacta pegada arriba al bajar (sin saltos) */
+.mv-hueco { position: relative; margin-bottom: 14px; }
+.mv-hueco .marcador-vivo { position: relative; top: auto; margin: 0; }
+.mv-hueco .marcador-vivo.fijo { position: fixed; z-index: 20; padding: 6px 10px; grid-template-columns: 1fr auto 1fr; gap: 6px;
+  border-radius: 0 0 14px 14px; box-shadow: 0 8px 20px rgba(0, 0, 0, .25); }
+.marcador-vivo.fijo .mv-estadio { display: none; }
+.marcador-vivo.fijo .mv-equipo { flex-direction: row; gap: 6px; font-size: .78rem; }
+.marcador-vivo.fijo .mv-equipo:last-of-type { flex-direction: row-reverse; }
+.marcador-vivo.fijo .mv-equipo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.marcador-vivo.fijo .escudo.grande { width: 26px; height: 26px; }
+.marcador-vivo.fijo .mv-goles { font-size: 1.5rem; gap: 6px; }
+.marcador-vivo.fijo .mv-goles i { font-size: 1rem; }
+.marcador-vivo.fijo .mv-reloj { display: inline-flex; gap: 4px; align-items: baseline; font-size: .8rem; }
+
+.vv-copas { display: block; margin-top: 4px; font-size: .9rem; }
+.vv-copas b { color: var(--verde); }
+.punto.crack { background: conic-gradient(#ff4d4d, #ffd84d, #4dff88, #4dd2ff, #b84dff, #ff4d4d); box-shadow: 0 0 8px rgba(184, 77, 255, .8); }
+
+/* celebración al sacar una carta especial: estrella (dorado) y crack (arcoíris) */
+.celebra { position: fixed; inset: 0; z-index: 300; pointer-events: none; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 6px; text-align: center; animation: celebra-sale 1.7s ease-in forwards; }
+.celebra.crack { animation-duration: 2.6s; }
+.celebra b { font-size: clamp(2.6rem, 13vw, 5.5rem); font-weight: 900; letter-spacing: .02em; animation: celebra-entra .55s cubic-bezier(.2, 1.6, .3, 1) both; }
+.celebra span { font-size: 1.2rem; font-weight: 800; color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, .8); animation: celebra-entra .55s .15s both; }
+.celebra.estrella b { color: #ffd34d; text-shadow: 0 0 18px rgba(255, 190, 0, .9), 0 4px 0 #b37400; }
+.celebra.estrella { animation-duration: 1.9s; }
+.celebra.crack b { background: linear-gradient(90deg, #ff4d4d, #ffd84d, #4dff88, #4dd2ff, #b84dff, #ff4d4d); background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 12px rgba(0, 0, 0, .6));
+  animation: celebra-entra .6s cubic-bezier(.2, 1.6, .3, 1) both, arcoiris-texto 1s linear infinite; }
+.celebra-luz { position: absolute; inset: 0; z-index: -1; }
+.celebra.estrella .celebra-luz { background: radial-gradient(circle, rgba(20, 12, 0, .82) 0 30%, rgba(255, 190, 40, .45) 45%, transparent 70%); animation: celebra-flash 1.7s ease-out forwards; }
+.celebra.crack::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(circle, rgba(8, 6, 24, .9) 0 32%, rgba(8, 6, 24, .55) 50%, transparent 75%);
+  animation: celebra-flash 2.6s ease-out forwards; }
+.celebra.crack .celebra-luz { z-index: -2; background: conic-gradient(from 0deg, rgba(255, 77, 77, .55), rgba(255, 216, 77, .55), rgba(77, 255, 136, .55),
+  rgba(77, 210, 255, .55), rgba(184, 77, 255, .55), rgba(255, 77, 77, .55)); animation: celebra-flash 2.6s ease-out forwards, gira-luz 2s linear infinite; }
+@keyframes celebra-entra { from { transform: scale(.2) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes celebra-sale { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes celebra-flash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes gira-luz { to { transform: rotate(360deg) scale(1.6); } }
+@keyframes arcoiris-texto { to { background-position: 200% 0; } }
+/* la carta especial queda brillando */
+.calidad-estrella .mini { box-shadow: 0 0 0 3px #ffd34d, 0 0 22px rgba(255, 190, 0, .8); border-radius: 8px; }
+.calidad-crack .mini { box-shadow: 0 0 0 3px #fff, 0 0 26px rgba(184, 77, 255, .9), 0 0 50px rgba(77, 210, 255, .6); border-radius: 8px;
+  animation: crack-pulso 1.2s ease-in-out infinite; }
+@keyframes crack-pulso { 50% { box-shadow: 0 0 0 3px #fff, 0 0 34px rgba(255, 77, 77, .9), 0 0 60px rgba(255, 216, 77, .7); } }
+.etiqueta-calidad { display: inline-block; font-size: .72rem; font-weight: 900; padding: 1px 8px; border-radius: 99px; margin-top: 2px; }
+.etiqueta-calidad.estrella { background: #ffd34d; color: #3a2600; }
+.etiqueta-calidad.crack { background: linear-gradient(90deg, #ff4d4d, #ffd84d, #4dff88, #4dd2ff, #b84dff); color: #111; }
+.ap-sobre.brilla-crack { box-shadow: 0 0 0 3px #fff, 0 0 40px rgba(184, 77, 255, .9), 0 0 80px rgba(77, 210, 255, .6) !important; }
+@media (prefers-reduced-motion: reduce) { .celebra, .celebra *, .calidad-crack .mini { animation: none !important; } }
+
+/* ===== cartas mejoradas: se van tiñendo de ROJO con cada nivel (2 rojizo … 5 rojo intenso) =====
+   (reemplaza el brillo del mismo tono: no se notaba). La foto y los números quedan sin teñir. */
+.mini.mej2 { --rojo: 255, 120, 100; --tinte: .22; }
+.mini.mej3 { --rojo: 250, 80, 70; --tinte: .38; }
+.mini.mej4 { --rojo: 235, 45, 45; --tinte: .55; }
+.mini.mej5 { --rojo: 210, 15, 30; --tinte: .72; }
+.mini .m-aura { z-index: 1; mix-blend-mode: normal; background: none; border-color: rgba(var(--rojo), .95); }
+.mini .m-aura::before { content: ""; position: absolute; inset: 0; mix-blend-mode: color; pointer-events: none;
+  background: linear-gradient(160deg, rgba(var(--rojo), var(--tinte)), rgba(var(--rojo), calc(var(--tinte) + .15))); }
+.mini.mej2 .m-aura { border-width: 2px; box-shadow: inset 0 0 10px 2px rgba(var(--rojo), .45); }
+.mini.mej3 .m-aura { border-width: 3px; box-shadow: inset 0 0 16px 4px rgba(var(--rojo), .6); }
+.mini.mej4 .m-aura { border-width: 4px; border-color: #fff; box-shadow: inset 0 0 0 3px rgb(var(--rojo)), inset 0 0 22px 7px rgba(var(--rojo), .7); }
+.mini.mej5 .m-aura { border-width: 5px; border-color: #fff; box-shadow: inset 0 0 0 4px rgb(var(--rojo)), inset 0 0 28px 10px rgba(var(--rojo), .85);
+  animation: aura-roja 2.2s ease-in-out infinite; }
+@keyframes aura-roja { 50% { box-shadow: inset 0 0 0 4px rgb(var(--rojo)), inset 0 0 36px 14px rgba(255, 60, 40, .95); } }
+.mini[class*="mej"] .m-render { z-index: 2; }
+.mini[class*="mej"] .m-ovr, .mini[class*="mej"] .m-pos, .mini[class*="mej"] .m-club, .mini[class*="mej"] .m-nac,
+.mini[class*="mej"] .m-nombre, .mini[class*="mej"] .m-mejora { position: absolute; z-index: 3; }
+.mini.mej4 .m-nombre, .mini.mej5 .m-nombre { border-top-color: rgb(var(--rojo)); box-shadow: 0 -4px 12px rgba(var(--rojo), .5); }
+.mini.mej4 .m-mejora, .mini.mej5 .m-mejora { color: #fff; text-shadow: 0 0 6px rgb(var(--rojo)), 0 0 2px #000; }
+
+/* ---------- insignias de cancha (hasta tener las ilustraciones: escudito con número y metal) */
+.insignia { --m1: #e9b27c; --m2: #8c5428; --m3: #5c3415; display: inline-grid; place-items: center; width: 1.5em; height: 1.72em;
+  vertical-align: middle; position: relative; flex-shrink: 0;
+  clip-path: polygon(50% 0, 100% 14%, 100% 58%, 50% 100%, 0 58%, 0 14%);
+  background: linear-gradient(160deg, var(--m1), var(--m2) 70%, var(--m3)); }
+.insignia::before { content: ""; position: absolute; inset: 9%; clip-path: inherit;
+  background: radial-gradient(circle at 50% 30%, #3a443f, #151c19 75%); }
+.insignia b { position: relative; font-family: var(--titulo, inherit); font-size: .82em; line-height: 1; color: var(--m1);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .6); margin-top: -.12em; }
+.insignia.plata { --m1: #f1f4f6; --m2: #9aa4aa; --m3: #59626a; }
+.insignia.oro { --m1: #ffe9a3; --m2: #c8922e; --m3: #7a4c0e; }
+.insignia.grande { font-size: 2.6rem; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .45)); }
+.insignia-img { width: 1.6em; height: auto; vertical-align: middle; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .35)); }
+.insignia-img.grande { width: 4.2rem; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .45)); }
+.ah-ico { font-size: inherit; filter: none; }
+.cp-ico .insignia, .cp-ico .insignia-img { font-size: 1.5rem; }
+.cp-ico svg.ico { width: 1.4rem; height: 1.4rem; opacity: .75; }
+
+/* ---------- mini sobres (hasta tener las ilustraciones) */
+.sobre-mini { display: inline-block; width: 1.1em; height: 1.5em; border-radius: .14em; vertical-align: middle; position: relative;
+  background: linear-gradient(150deg, #e8ecef, #8d989e); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, .25), 0 2px 5px rgba(0, 0, 0, .3); }
+.sobre-mini::after { content: ""; position: absolute; left: 0; right: 0; top: 22%; height: 2px; background: rgba(255, 255, 255, .55); }
+.sobre-mini.super { background: linear-gradient(150deg, #7db6ff, #1d4fd6); }
+.sobre-mini.premium { background: linear-gradient(150deg, #f5c2ff, #7b2fbf 60%, #c9a227); box-shadow: inset 0 0 0 1.5px rgba(255, 222, 120, .7), 0 2px 8px rgba(123, 47, 191, .5); }
+
+/* ---------- podio del ranking (en vez de 🥇🥈🥉) */
+.rc-pos.oro, .rc-pos.plata, .rc-pos.bronce { display: inline-grid; place-items: center; width: 1.9em; height: 1.9em; border-radius: 50%;
+  color: #1b1408; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .2), 0 1px 3px rgba(0, 0, 0, .3); }
+.rc-pos.oro { background: linear-gradient(160deg, #ffe9a3, #c8922e); }
+.rc-pos.plata { background: linear-gradient(160deg, #f1f4f6, #9aa4aa); }
+.rc-pos.bronce { background: linear-gradient(160deg, #e9b27c, #8c5428); color: #fff; }
+.ico-envoltura { display: inline-flex; }
+/* chip de la cancha bajo el club (menú): texto blanco legible sobre el color de la cancha */
+.menu .menu-club .copas-badge, .copas-badge { color: #fff !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .45); display: inline-flex; align-items: center; gap: 4px; }
+.copas-badge svg.ico { width: 1em; height: 1em; }
+.st-vacio-todo { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; padding: 12px 14px; border: 1px dashed var(--borde);
+  border-radius: 14px; font-size: 1.5rem; }
+.st-vacio-todo p { margin: 0 0 0 10px; font-size: .9rem; line-height: 1.35; }
+.st-vacio-todo .sobre-mini:nth-child(2) { transform: rotate(-6deg); } .st-vacio-todo .sobre-mini:nth-child(3) { transform: rotate(6deg); }
+.st.vacio { min-height: 72px; }
+/* insignias ilustradas */
+.insignia-img.grande { width: 5.6rem; }
+.cp-ico { position: relative; display: inline-block; line-height: 0; }
+.cp-ico .insignia-img { width: 3.2rem; }
+.cp-ico .bloqueada { filter: grayscale(1) brightness(.55) contrast(.9); }
+.cp-candado { position: absolute; right: -4px; bottom: -2px; display: grid; place-items: center; width: 1.35rem; height: 1.35rem;
+  border-radius: 50%; background: rgba(15, 21, 18, .85); color: #e8e8e8; line-height: 0; }
+.cp-candado svg.ico { width: .8rem; height: .8rem; }
+.rc-cancha .insignia-img, .copas-badge .insignia-img { width: 1.5em; }
+.mv-estadio .insignia-img { width: 1.6em; }
+.bus-radar b .insignia-img { width: 3.4rem; }
+
+/* ---------- sobres ilustrados (/static/sobres/<tipo>.webp) */
+.sobre-arte.gratis, .ap-sobre.gratis { --sobre: url(/static/sobres/gratis.webp); }
+.sobre-arte.basico, .ap-sobre.basico, .sobre-mini { --sobre: url(/static/sobres/basico.webp); }
+.sobre-arte.super, .ap-sobre.super, .sobre-mini.super { --sobre: url(/static/sobres/super.webp); }
+.sobre-arte.premium, .ap-sobre.premium, .sobre-mini.premium { --sobre: url(/static/sobres/premium.webp); }
+.sobre-arte.gratis, .sobre-arte.basico, .sobre-arte.super, .sobre-arte.premium,
+.ap-sobre.gratis, .ap-sobre.basico, .ap-sobre.super, .ap-sobre.premium {
+  background: var(--sobre) center / contain no-repeat !important; border-radius: 0; box-shadow: none; overflow: visible;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, .45)); }
+.sobre-arte.premium, .ap-sobre.premium { filter: drop-shadow(0 10px 16px rgba(0, 0, 0, .45)) drop-shadow(0 0 14px rgba(201, 162, 39, .45)); }
+.sobre-arte { width: 120px; aspect-ratio: 5 / 7; }
+/* el brillo que cruza el sobre: recortado a la forma del sobre */
+.sobre-arte.gratis::after, .sobre-arte.basico::after, .sobre-arte.super::after, .sobre-arte.premium::after,
+.ap-sobre.gratis::after, .ap-sobre.basico::after, .ap-sobre.super::after, .ap-sobre.premium::after {
+  -webkit-mask: var(--sobre) center / contain no-repeat; mask: var(--sobre) center / contain no-repeat; }
+.ap-sobre small { display: none; }
+.ap-tira { background: transparent; border-bottom: 2px dashed rgba(255, 255, 255, .55); left: 8%; right: 8%; }
+.sobre-cartas { margin-top: -4px; }
+/* mini sobres (inicio): la ilustración en chico */
+.sobre-mini { background: var(--sobre) center / contain no-repeat !important; box-shadow: none !important; border-radius: 0;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); width: 1.15em; height: 1.6em; }
+.sobre-mini::after { display: none; }
+.st-ico .sobre-mini { font-size: 2.6rem; }
+/* copa y moneda ilustradas */
+.moneda { background: url(/static/logo/moneda.webp) center / contain no-repeat !important; box-shadow: none !important; border-radius: 0 !important; }
+.copa-img { width: 1.15em; height: 1.15em; vertical-align: -0.2em; object-fit: contain; }
+.ap-sobre.gratis.brilla, .ap-sobre.basico.brilla, .ap-sobre.super.brilla, .ap-sobre.premium.brilla {
+  box-shadow: none !important; filter: drop-shadow(0 0 22px rgba(255, 210, 90, .95)) drop-shadow(0 0 40px rgba(255, 210, 90, .6)); }
+.ap-sobre.gratis.brilla-crack, .ap-sobre.basico.brilla-crack, .ap-sobre.super.brilla-crack, .ap-sobre.premium.brilla-crack {
+  box-shadow: none !important; filter: drop-shadow(0 0 22px rgba(184, 77, 255, .95)) drop-shadow(0 0 44px rgba(77, 210, 255, .7)) !important; }
+/* el brillo de los sobres ilustrados se mueve por dentro (no se desplaza la capa: así no queda un "fantasma" afuera) */
+.sobre-arte.gratis::after, .sobre-arte.basico::after, .sobre-arte.super::after, .sobre-arte.premium::after,
+.ap-sobre.gratis::after, .ap-sobre.basico::after, .ap-sobre.super::after, .ap-sobre.premium::after {
+  transform: none !important; background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, .45) 50%, transparent 60%) 0 0 / 300% 100% no-repeat;
+  animation: brillo-sobre 2.8s ease-in-out infinite; }
+@keyframes brillo-sobre { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0% 0; } }
+
+/* ---------- cancha ilustrada (vista desde arriba) según la cancha; las líneas ya vienen dibujadas */
+.estadio, .estadio[class*="arena-"] { background: #3f8a3a url(/static/canchas/campo-dia.webp) center / 100% 100% no-repeat !important;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .25), inset 0 0 60px rgba(0, 0, 0, .3), 0 10px 26px rgba(0, 0, 0, .3) !important; }
+.estadio.arena-barrio { background-image: url(/static/canchas/campo-barrio.webp) !important; }
+.estadio.arena-tierra { background-image: url(/static/canchas/campo-tierra.webp) !important; }
+.estadio.arena-municipal { background-image: url(/static/canchas/campo-municipal.webp) !important; }
+.estadio.arena-septima, .estadio.arena-sexta, .estadio.arena-quinta, .estadio.arena-cuarta, .estadio.arena-tercera,
+.estadio.arena-segunda, .estadio.pvp { background-image: url(/static/canchas/campo-noche.webp) !important; }
+.estadio.arena-primera { background-image: url(/static/canchas/campo-final.webp) !important; }
+.estadio .lin, .estadio .punto { display: none; }
+
+/* ---------- fichas de jugadores: camiseta del club, número y arquero de otro color */
+.ficha i { display: grid; place-items: center; background: var(--c) !important; border: 2px solid rgba(0, 0, 0, .55);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, .5), inset 0 -3px 0 rgba(0, 0, 0, .2), inset 0 2px 0 rgba(255, 255, 255, .25); }
+.ficha i b { font-size: max(8px, 1.45cqw); font-weight: 800; line-height: 1; color: var(--t, #fff); font-family: var(--titulo, inherit); }
+.ficha.mia i { border-color: #fff; }
+.ficha.arquero i { border-style: solid; }
+
+/* ---------- dorso de carta y silueta de jugador sin foto */
+.cara.dorso { background: url(/static/logo/dorso.webp) center / 100% 100% no-repeat !important; border: 0 !important;
+  border-radius: 12px; color: transparent !important; font-size: 0 !important; }
+.m-silueta { background: url(/static/logo/silueta.webp) center bottom / contain no-repeat !important; opacity: .55 !important; }
+/* estados vacíos ilustrados */
+.vacio-ilus { display: flex; align-items: center; gap: 14px; }
+.vacio-ilus img { width: 110px; height: auto; flex-shrink: 0; }
+.vacio-ilus p { margin: 0; color: var(--tenue, #667); line-height: 1.4; }
+.vacio-ilus p b { color: var(--texto); }
+
+/* ---------- pantalla VS al empezar el partido */
+.vs-capa { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: linear-gradient(180deg, rgba(5, 10, 8, .55), rgba(5, 10, 8, .85)), url(/static/logo/fondo-estadio.webp) center / cover;
+  color: #fff; animation: vs-entra .35s ease-out; cursor: pointer; }
+.vs-capa.fuera { animation: vs-sale .45s ease-in forwards; }
+.vs-fila { display: flex; align-items: center; justify-content: center; gap: clamp(12px, 5vw, 60px); width: 100%; padding: 0 12px; }
+.vs-equipo { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 38%; max-width: 260px; text-align: center; }
+.vs-equipo img, .vs-equipo svg, .vs-equipo .escudo { width: clamp(84px, 22vw, 150px) !important; height: clamp(84px, 22vw, 150px) !important;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .6)); }
+.vs-equipo b { font-family: var(--titulo, inherit); font-size: clamp(1rem, 4vw, 1.6rem); line-height: 1.1; text-shadow: 0 2px 8px rgba(0, 0, 0, .8); }
+.vs-equipo.izq { animation: vs-izq .5s cubic-bezier(.2, .9, .3, 1.2) both; }
+.vs-equipo.der { animation: vs-der .5s cubic-bezier(.2, .9, .3, 1.2) both; }
+.vs-centro i { font-style: normal; font-family: var(--titulo, inherit); font-weight: 900; font-size: clamp(2.4rem, 10vw, 4.6rem); letter-spacing: .04em;
+  background: linear-gradient(180deg, #fff1b8, #f2c75c 45%, #b9861a); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 3px 0 #3a2405) drop-shadow(0 0 18px rgba(242, 199, 92, .6)); animation: vs-golpe .45s .3s cubic-bezier(.2, .9, .3, 1.4) both; display: inline-block; }
+.vs-lugar { margin: 0; display: flex; align-items: center; gap: 8px; font-size: .95rem; opacity: .9; animation: vs-entra .4s .45s both; }
+.vs-lugar .insignia-img { width: 2.2em; }
+@keyframes vs-entra { from { opacity: 0; } }
+@keyframes vs-sale { to { opacity: 0; transform: scale(1.04); } }
+@keyframes vs-izq { from { transform: translateX(-60vw); } }
+@keyframes vs-der { from { transform: translateX(60vw); } }
+@keyframes vs-golpe { from { transform: scale(2.6); opacity: 0; } }
+
+/* ---------- álbum */
+.album-cabeza { display: grid; grid-template-columns: minmax(0, 300px) 1fr; gap: 18px; align-items: center; }
+.album-banner { width: 100%; height: auto; border-radius: 12px; box-shadow: 0 8px 22px rgba(0, 0, 0, .3); }
+.album-texto h2 { margin-top: 0; }
+@media (max-width: 640px) { .album-cabeza { grid-template-columns: 1fr; } }
+.barra-avance { position: relative; display: block; height: 8px; border-radius: 99px; background: rgba(127, 127, 127, .2); overflow: visible; }
+.barra-avance i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: linear-gradient(90deg, #2fbf71, #c9a227); }
+.barra-avance em { position: absolute; top: -3px; bottom: -3px; width: 2px; background: rgba(0, 0, 0, .35); border-radius: 2px; }
+.barra-avance.grande { height: 12px; margin-top: 6px; }
+.album-total { margin-top: 10px; display: grid; gap: 6px; max-width: 420px; }
+.album-ligas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.album-liga { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 4px 12px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--borde); border-radius: 14px; text-decoration: none; color: var(--texto); transition: transform .15s, border-color .15s; }
+.album-liga:hover { transform: translateY(-2px); border-color: var(--verde); }
+.album-liga .album-bandera { grid-row: span 2; width: 42px; height: auto; border-radius: 4px; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
+.al-nombre { display: flex; flex-direction: column; } .al-nombre small { color: var(--tenue); }
+.al-avance { display: grid; gap: 4px; } .al-avance small { color: var(--tenue); font-size: .75rem; }
+.album-premio-aviso { position: absolute; top: -7px; right: -7px; min-width: 22px; height: 22px; padding: 0 6px; display: grid; place-items: center;
+  border-radius: 99px; background: #e5534b; color: #fff; font-weight: 800; font-size: .78rem; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); animation: latido 1.2s ease-in-out infinite; }
+.album-titulo { display: flex; align-items: center; gap: 8px; }
+.album-clubes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.album-club { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; text-align: center;
+  border: 1px solid var(--borde); border-radius: 14px; text-decoration: none; color: var(--texto); transition: transform .15s, border-color .15s; }
+.album-club:hover { transform: translateY(-2px); border-color: var(--verde); }
+.album-club .barra-avance { width: 100%; }
+.album-club small { color: var(--tenue); font-size: .75rem; }
+.album-club.completo { border-color: #c9a227; box-shadow: 0 0 0 1px #c9a227, 0 6px 18px rgba(201, 162, 39, .25); }
+.album-objs { display: flex; gap: 6px; } .album-objs i { opacity: .3; } .album-objs i.tiene { opacity: 1; color: #c9a227; }
+.album-club-cabeza { display: flex; align-items: center; gap: 16px; margin: 8px 0 14px; }
+.album-club-cabeza > div { flex: 1; } .album-club-cabeza h2 { margin: 0; }
+.album-premios { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.album-premio { display: grid; gap: 6px; padding: 12px 14px; border: 1px dashed var(--borde); border-radius: 14px; }
+.album-premio span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.album-premio .sobre-mini { font-size: 1rem; }
+.album-premio.listo { border: 1px solid #c9a227; background: rgba(201, 162, 39, .1); }
+.album-premio.cobrado { opacity: .65; }
+.album-premio em { font-style: normal; font-weight: 700; }
+.album-cartas .mini { cursor: default; }
+.album-cartas .mini.falta { filter: grayscale(1) brightness(.75); opacity: .55; }
+.album-objetos .objeto.falta { filter: grayscale(1); opacity: .45; }
+/* pantalla de entrada: estadio de noche de fondo */
+body.pantalla-entrar { background: linear-gradient(180deg, rgba(5, 10, 8, .55), rgba(5, 10, 8, .8)), url(/static/logo/fondo-estadio.webp) center / cover fixed !important; }
+body.pantalla-entrar .barra { background: transparent !important; border: 0; }
+/* en celular las fichas no bajan de un tamaño legible */
+.ficha { width: max(3.4%, 17px); }
+.ficha i b { font-size: max(9px, 1.45cqw); }

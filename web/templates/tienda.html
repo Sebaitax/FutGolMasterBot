@@ -2,33 +2,22 @@
 {% block contenido %}
 <section class="tarjeta">
   <h2>Sobres</h2>
-  <p class="tenue">Todas las cartas son de <b>tu liga ({{ cancha.bandera }} {{ cancha.pais }})</b> y su calidad depende de tu cancha
-    (<b>{{ cancha.ico }} {{ cancha.nombre }}</b>): mientras más subas, mejores jugadores.</p>
+  <p class="tenue">{% if cancha.indice >= 3 %}Las cartas salen de <b>todas las ligas y equipos</b>{% else %}Las cartas son de <b>tu liga ({{ cancha.bandera|bandera('texto') }} {{ cancha.pais }})</b>; desde la Décima División salen de todas las ligas{% endif %}, y su calidad depende de tu cancha
+    (<b>{{ cancha.nombre }}</b>): mientras más subas, mejores jugadores.</p>
   <ul class="calidades">{% for k, txt in calidades.items() %}<li><span class="punto {{ k }}"></span><b>{{ k|capitalize }}</b>: {{ txt|lower }}</li>{% endfor %}</ul>
   <p class="tenue">Además pueden salir <b>escudos y estadios de colección</b> (tienes {{ objetos_tengo }} de {{ objetos_total }}). Se equipan en tu club desde el Inventario o el Perfil.</p>
   <div class="sobres">
     <div class="sobre-prod gratis" id="prod-gratis">
-      <div class="sobre-arte gratis"><span>GRATIS</span><small>1 carta</small></div>
-      <h3>Carta gratis</h3>
-      <ul>
-        {% for nivel, pr in prob_gratis.items() %}
-        <li><span class="punto {{ nivel }}"></span>{{ nivel|capitalize }} <b>{{ "%g"|format(pr * 100) }}%</b></li>
-        {% endfor %}
-      </ul>
+      <div class="sobre-arte gratis" role="img" aria-label="Sobre gratis"></div>
+      <h3>Carta gratis</h3><small class="tenue sobre-cartas">1 carta</small>
       <button class="primario" id="btn-gratis" data-espera="{{ espera_gratis }}">Reclamar</button>
       <small class="tenue">Una cada 8 horas. Las repetidas sirven para mejorar.</small>
     </div>
     {% for clave, s in sobres.items() %}
     <div class="sobre-prod {{ clave }}">
-      <div class="sobre-arte {{ clave }}"><span>FGM</span><small>{{ s.cartas }} cartas</small></div>
-      <h3>{{ s.nombre }}</h3>
-      <ul>
-        {% for nivel, p in s.probabilidades.items() if p > 0 %}
-        <li><span class="punto {{ nivel }}"></span>{{ nivel|capitalize }} <b>{{ "%g"|format(p * 100) }}%</b></li>
-        {% endfor %}
-        <li class="obj-prob">🏟️ Escudo o estadio: <b>{{ "%g"|format(s.objeto * 100) }}%</b> por carta</li>
-      </ul>
-      <button class="primario abrir" data-clave="{{ clave }}" data-precio="{{ s.precio }}">🪙 {{ s.precio|miles }}</button>
+      <div class="sobre-arte {{ clave }}" role="img" aria-label="{{ s.nombre }}"></div>
+      <h3>{{ s.nombre }}</h3><small class="tenue sobre-cartas">{{ s.cartas }} cartas</small>
+      <button class="primario abrir" data-clave="{{ clave }}" data-precio="{{ s.precio }}">{{ ico('moneda') }} {{ s.precio|miles }}</button>
     </div>
     {% endfor %}
   </div>
@@ -36,12 +25,12 @@
 
 <!-- apertura: una carta a la vez -->
 <div class="apertura" id="apertura" hidden>
-  <button class="ap-saltar enlace" id="ap-saltar">Saltar ⏭</button>
+  <button class="ap-saltar enlace" id="ap-saltar">Saltar {{ ico('skip-forward') }}</button>
   <div class="ap-escena">
     <div class="ap-pila" id="ap-pila"></div>
     <div class="ap-sobre" id="ap-sobre">
       <div class="ap-tira"></div>
-      <span>FGM</span><small id="ap-nombre"></small>
+      <small id="ap-nombre"></small>
     </div>
   </div>
   <p class="ap-ayuda" id="ap-ayuda"></p>
@@ -88,13 +77,16 @@
   function abrir(clave, nombre, cartas) {
     // de menor a mayor: la mejor carta sale al final
     // de menor a mayor; a igual rareza, los objetos de colección al final
-    cola = cartas.slice().sort((a, b) => RANGO[a.nivel] - RANGO[b.nivel] || (a.ovr || 999) - (b.ovr || 999));
+    // las especiales (estrella, crack) al final, para el suspenso
+    const RC = FGM.RANGO_CALIDAD;
+    cola = cartas.slice().sort((a, b) => (RC[a.calidad] || 0) - (RC[b.calidad] || 0) || RANGO[a.nivel] - RANGO[b.nivel] || (a.ovr || 999) - (b.ovr || 999));
     total = cola.length;
     pila.innerHTML = ''; reveladas.innerHTML = '';
     $('ap-botones').hidden = true; $('ap-saltar').hidden = false;
     $('ap-nombre').textContent = nombre;
     sobre.className = 'ap-sobre ' + clave;
-    if (cola.some(c => c.nivel === 'oro')) sobre.classList.add('brilla');
+    if (cola.some(c => c.nivel === 'oro' || c.calidad === 'estrella' || c.calidad === 'crack')) sobre.classList.add('brilla');
+    if (cola.some(c => c.calidad === 'crack')) sobre.classList.add('brilla-crack');
     ap.hidden = false;
     reanimar(sobre, 'agita');
     SND.agitar();
@@ -145,7 +137,10 @@
       arriba.classList.add('volteada');
       SND.voltear();
       setTimeout(() => SND.revelar(c.tipo ? (c.nivel || 'plata') : c.nivel), 250);
-      if (c.nivel === 'oro') { setTimeout(() => { confeti(90); reanimar(ap, 'destello'); }, 350); }
+      if (c.calidad === 'estrella' || c.calidad === 'crack') {
+        arriba.classList.add('calidad-' + c.calidad);
+        setTimeout(() => { reanimar(ap, 'destello'); FGM.celebrar(c.calidad, c.completo); }, 350);
+      } else if (c.nivel === 'oro') { setTimeout(() => { confeti(90); reanimar(ap, 'destello'); }, 350); }
       ayuda.innerHTML = cola.length > 1 ? `Toca para la siguiente · <b>${total - cola.length + 1} / ${total}</b>` : 'Toca para terminar';
       return;
     }
@@ -163,8 +158,9 @@
 
   function agregarRevelada(c) {
     const div = document.createElement('div');
-    div.className = 'ap-mini';
-    div.innerHTML = c.tipo ? FGM.objeto(c) : carta(c);
+    div.className = 'ap-mini' + (c.calidad === 'estrella' || c.calidad === 'crack' ? ' calidad-' + c.calidad : '');
+    div.innerHTML = c.tipo ? FGM.objeto(c) : carta(c) + (c.calidad === 'estrella' || c.calidad === 'crack'
+      ? `<span class="etiqueta-calidad ${c.calidad}">${c.calidad === 'crack' ? 'CRACK' : 'ESTRELLA'}</span>` : '');
     reveladas.appendChild(div);
   }
 
@@ -198,9 +194,9 @@
   function relojGratis() {
     const resta = Math.max(0, Math.round((finEspera - Date.now()) / 1000));
     btnGratis.disabled = resta > 0;
-    btnGratis.textContent = resta > 0
-      ? `⏳ ${Math.floor(resta / 3600)}:${String(Math.floor(resta / 60) % 60).padStart(2, '0')}:${String(resta % 60).padStart(2, '0')}`
-      : '🎁 Reclamar';
+    btnGratis.innerHTML = resta > 0
+      ? `${FGM_ICO('hourglass')} ${Math.floor(resta / 3600)}:${String(Math.floor(resta / 60) % 60).padStart(2, '0')}:${String(resta % 60).padStart(2, '0')}`
+      : FGM_ICO('gift') + ' Reclamar';
     $('prod-gratis').classList.toggle('lista', resta === 0);
   }
   setInterval(relojGratis, 1000);

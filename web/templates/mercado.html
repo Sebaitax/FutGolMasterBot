@@ -6,8 +6,8 @@
     <span class="etiqueta">Fecha {{ fecha }} · {{ en_venta }} en venta</span>
   </div>
   <div class="filtros pestanas" id="pestanas">
-    <button data-modo="jugador" class="activo">🔎 Buscar jugador</button>
-    <button data-modo="venta">🏷️ En venta</button>
+    <button data-modo="jugador" class="activo">Buscar jugador</button>
+    <button data-modo="venta">En venta</button>
   </div>
   <p class="tenue" id="ayuda"></p>
 
@@ -74,7 +74,7 @@
   let modo = 'jugador', lista = [], mercado = {}, abierto = null;  // mercado: carta_id -> publicaciones consultadas
 
   const monedas = () => +document.getElementById('monedas').dataset.valor;
-  const precio = n => '🪙 ' + n.toLocaleString('es-CL');
+  const precio = n => FGM_ICO('moneda') + ' ' + n.toLocaleString('es-CL');
   const buscarO = id => lista.find(x => x.carta_id === id);
 
   // estado de un jugador en el mercado (en la lista y en la ficha)
@@ -82,11 +82,11 @@
     if (o.tuya) return '<span class="sello tuya">YA LO TIENES</span>';
     if (o.vendida) return '<span class="sello">FICHADO</span>';
     const pubs = o.en_mercado ? [o] : mercado[o.carta_id];
-    if (pubs === undefined) return `<button class="ver-mercado ${grande ? 'grande-btn' : ''}">🔎 Buscar en el mercado</button>`;
+    if (pubs === undefined) return `<button class="ver-mercado ${grande ? 'grande-btn' : ''}">${FGM_ICO('search')} Buscar en el mercado</button>`;
     if (!pubs.length) return '<span class="sello fuera">NADIE LO VENDE</span><small class="tenue">Vuelve a mirar en la próxima fecha.</small>';
     const p = pubs[0];
-    return `<small class="en-mercado">✅ En venta</small><small class="vende">🏷️ Lo vende: ${esc(p.vendedor)}</small>
-      <small class="tenue">${p.quedan <= 1 ? '⏳ Vence esta fecha' : `Vence en ${p.quedan} fechas`}</small>
+    return `<small class="en-mercado">En venta</small><small class="vende">Lo vende: ${esc(p.vendedor)}</small>
+      <small class="tenue">${p.quedan <= 1 ? 'Vence esta fecha' : `Vence en ${p.quedan} fechas`}</small>
       <button class="primario comprar ${grande ? 'grande-btn' : ''}" ${monedas() < p.precio ? 'disabled' : ''}>Comprar · ${precio(p.precio)}</button>`;
   }
 
@@ -112,7 +112,7 @@
       `<div class="barra-stat"><span>${NOMBRE_STAT[k] || k}</span><i><em style="width:${v}%"></em></i><b>${v}</b></div>`).join('');
     fichaCaja.dataset.id = o.carta_id;
     fichaCaja.innerHTML = `
-      <button class="enlace cerrar" id="cerrar" title="Cerrar">✕</button>
+      <button class="enlace cerrar" id="cerrar" title="Cerrar">${FGM_ICO('x')}</button>
       <div class="fi-cab">
         <div class="fi-carta">${carta(o, {grande: true})}</div>
         <div class="fi-info">

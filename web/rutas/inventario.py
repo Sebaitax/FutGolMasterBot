@@ -46,4 +46,6 @@ def api_carta_gratis(p: Partida = P):
     except ErrorJuego as e:
         return error_json(e)
     bitacora.anotar("juego", f"Carta gratis: {f.carta.nombre} {f.carta.ovr}")
-    return {"cartas": [_ficha_json(f)], "monedas": p.monedas, "espera": p.segundos_para_carta_gratis()}
+    bitacora.anotar("metrica", "sobre", detalle={"origen": "gratis", "calidades": {p.calidades.get(f.pid, "normal"): 1}})
+    return {"cartas": [{**_ficha_json(f), "calidad": p.calidades.get(f.pid, "normal")}], "monedas": p.monedas,
+            "espera": p.segundos_para_carta_gratis()}

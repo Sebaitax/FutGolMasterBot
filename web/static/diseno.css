@@ -424,3 +424,41 @@ input:focus, select:focus { border-color: var(--verde); outline: none; box-shado
 .mini.mej4 .m-nombre, .mini.mej5 .m-nombre { border-top-color: rgb(var(--tono)); box-shadow: 0 -4px 12px rgba(var(--tono), .45); }
 .mini.mej4 .m-mejora, .mini.mej5 .m-mejora { color: #fff; text-shadow: 0 0 6px rgb(var(--tono)), 0 0 2px #000; }
 @media (prefers-reduced-motion: reduce) { .mini .m-aura, .mini[class*="mej"]::after { animation: none; } }
+
+/* logo */
+.marca-logo { width: 30px; height: 30px; display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+.menu .menu-marca .marca-logo { width: 34px; height: 34px; }
+.entrar-logo { margin: 0 0 6px; line-height: 0; }
+.entrar-logo img { width: min(260px, 70vw); height: auto; filter: drop-shadow(0 8px 18px rgba(0,0,0,.55)); }
+
+/* íconos de línea (sprite /static/iconos.svg) en vez de emojis */
+svg.ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.punto { display: inline-block; width: .6em; height: .6em; border-radius: 50%; vertical-align: .05em; background: #9aa5a0; }
+.punto.verde { background: #2fbf6b; box-shadow: 0 0 0 3px rgba(47,191,107,.18); }
+.punto.rojo { background: #e0443a; box-shadow: 0 0 0 3px rgba(224,68,58,.18); }
+.punto.amarillo { background: #f2b630; box-shadow: 0 0 0 3px rgba(242,182,48,.2); }
+.tarjeta-ico { display: inline-block; width: .62em; height: .86em; border-radius: 2px; vertical-align: -0.1em; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.tarjeta-ico.roja { background: #d8322a; } .tarjeta-ico.amarilla { background: #f3c623; }
+
+/* ---------- celular: 5 pestañas (Jugar destacado al centro) y "Más" abre una hoja */
+.menu .solo-escritorio-item { display: none !important; }
+.menu button.menu-item { background: none; border: 0; font: inherit; cursor: pointer; }
+.menu .menu-jugar { color: var(--texto); }
+.menu .menu-jugar .jugar-bola { display: grid; place-items: center; width: 48px; height: 48px; margin-top: -22px; border-radius: 50%;
+  background: linear-gradient(160deg, #3ddc84, #128a46); color: #fff; box-shadow: 0 6px 16px rgba(18, 138, 70, .45), 0 0 0 4px var(--fondo, #0f1512); }
+.menu .menu-jugar .jugar-bola .ico { width: 24px; height: 24px; }
+.menu .menu-jugar.activo::before { display: none; }
+.menu-mas { position: fixed; inset: 0; z-index: 39; background: rgba(0, 0, 0, .45); display: flex; align-items: flex-end; }
+.menu-mas[hidden] { display: none; }
+.menu-mas-hoja { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 16px 14px calc(84px + env(safe-area-inset-bottom));
+  border-radius: 18px 18px 0 0; background: var(--panel, #fff); box-shadow: 0 -10px 30px rgba(0, 0, 0, .3); animation: sube-hoja .2s ease-out; }
+.menu-mas-hoja a { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 6px; border-radius: 14px;
+  text-decoration: none; color: var(--texto); font-weight: 600; font-size: .85rem; background: rgba(127, 127, 127, .08); }
+.menu-mas-hoja a.activo { color: var(--verde); background: rgba(47, 191, 113, .12); }
+.menu-mas-hoja .ico { width: 26px; height: 26px; }
+@keyframes sube-hoja { from { transform: translateY(30px); opacity: 0; } }
+@media (min-width: 1024px) {
+  .menu .solo-escritorio-item { display: flex !important; }
+  .menu .solo-movil, .menu-mas { display: none !important; }
+}
