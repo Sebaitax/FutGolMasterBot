@@ -78,3 +78,45 @@ class TestEnVivo(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRelojesEnVivo(TestEnVivo):
+    """Bugs de jugadas clave 'pegadas': relojes adelantados y tácticas que borraban la jugada en curso."""
+
+    def nuevo(self):
+        from juego.en_vivo import PartidoVivo
+        vp = PartidoVivo("x", {"pid": "a", "equipo": self.club(11)}, {"pid": "b", "equipo": self.club(12)})
+        vp._reconstruir()
+        vp._nueva_pausa()
+        self.assertIsNotNone(vp.pausa)
+        return vp
+
+    def test_el_reloj_parte_cuando_los_dos_llegan(self):
+        import time
+        vp = self.nuevo()
+        clave = (vp.pausa["tiempo"], vp.pausa["minuto"])
+        vp.visto = [(1, 0), (1, 0)]
+        vp.pausa_creada = time.time() - 60          # la jugada existe hace un minuto en el servidor
+        vp._vencimientos()
+        self.assertIsNone(vp.prep, "no debe elegir por nadie si todavía no llegan a la jugada")
+        vp.visto = [clave, (1, 0)]
+        self.assertFalse(vp._pausa_activa())         # falta el otro
+        vp.visto = [clave, clave]
+        self.assertTrue(vp._pausa_activa())
+        self.assertIsNone(vp.prep)                   # recién empieza a correr: nadie eligió por ellos
+
+    def test_si_uno_se_desconecta_igual_corre(self):
+        import time
+        vp = self.nuevo()
+        clave = (vp.pausa["tiempo"], vp.pausa["minuto"])
+        vp.visto = [clave, (1, 0)]
+        vp.ultimo_contacto = [time.time(), time.time() - 60]
+        self.assertTrue(vp._pausa_activa())
+
+    def test_no_se_cambia_la_tactica_en_plena_jugada(self):
+        vp = self.nuevo()
+        clave = (vp.pausa["tiempo"], vp.pausa["minuto"])
+        vp.visto = [clave, clave]
+        vp.elegir(0, vp._validas(0)[0])
+        with self.assertRaises(ValueError):
+            vp.tactica(1, "presion")

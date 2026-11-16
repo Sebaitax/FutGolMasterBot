@@ -247,7 +247,14 @@ window.FGM_PULSO = (() => {
     return new Promise(async resolver => {
       for (let r = 0; r < prep.rondas; r++) {
         cont.querySelector('.pu-ronda').textContent = `Ronda ${r + 1} de ${prep.rondas}`;
-        const p = await new Promise(ok => gesto(miGesto, cont.querySelector('.pu-toque'), mio ? prep.zona_ataque : prep.zona_defensa, ok));
+        // tope de seguridad: si el navegador congela las animaciones (pantalla apagada, app en segundo plano)
+        // el gesto no termina nunca; a los 8 s la ronda cuenta como fallo y el partido sigue
+        const p = await new Promise(ok => {
+          let listo = false;
+          const fin = v => { if (!listo) { listo = true; clearTimeout(tope); ok(v); } };
+          const cancelar = gesto(miGesto, cont.querySelector('.pu-toque'), mio ? prep.zona_ataque : prep.zona_defensa, fin);
+          const tope = setTimeout(() => { if (typeof cancelar === 'function') cancelar(); fin(0.1); }, 8000);
+        });
         misToques.push(p);
         cont.querySelector('.pu-ronda').textContent = textos.esperando || 'El rival…';
         const q = await rivalToque(r, p);

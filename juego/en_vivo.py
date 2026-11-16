@@ -26,6 +26,7 @@ SUPLENTES_DEFECTO = 7
 ESPERA_ELEGIR = 15      # segundos que se espera al rival para elegir antes de elegir por él
 ESPERA_TOQUE = 8        # segundos por ronda del pulso
 ABANDONO = 90           # sin noticias de un jugador: el partido sigue solo
+MAX_ESPERA_LLEGAR = 120 # si alguien nunca llega a la jugada clave (pestaña congelada), igual corre el reloj
 ESPERANDO_VENCE = 120   # la sala de espera olvida a quien deja de preguntar
 REACCIONES = ("😂", "🔥", "😱", "👏", "😤", "🫡")
 APUESTAS = (0, 1000, 5000, 20000)
@@ -105,8 +106,24 @@ class PartidoVivo:
         self.eleccion = [None, None]
         self.toques = [[], []]
         self.prep = None
-        self.desde_pausa = time.time()
+        # el servidor simula adelantado: la jugada clave existe antes de que los navegadores lleguen a ese
+        # minuto (lo van mostrando de a poco). Los relojes parten recién cuando los dos la tienen en pantalla.
+        self.desde_pausa = None
+        self.pausa_creada = time.time()
         self.desde_ronda = time.time()
+
+    def _pausa_activa(self) -> bool:
+        """¿Ya empezó a correr la jugada clave? (los dos llegaron a ese minuto, o el que falta no está)."""
+        if not self.pausa:
+            return False
+        if self.desde_pausa is None:
+            ahora = time.time()
+            clave = (self.pausa.get("tiempo", 1), self.pausa.get("minuto", 0))
+            listos = all(tuple(self.visto[lado]) >= clave or self.eleccion[lado] is not None
+                         or ahora - self.ultimo_contacto[lado] > 15 for lado in (0, 1))
+            if listos or ahora - self.pausa_creada > MAX_ESPERA_LLEGAR:
+                self.desde_pausa = ahora
+        return self.desde_pausa is not None
 
     def _continuar(self, decision: dict):
         self.decisiones.append(decision)
@@ -146,7 +163,7 @@ class PartidoVivo:
 
     def _vencimientos(self):
         """Si alguien no responde a tiempo, se decide por él (mal)."""
-        if not self.pausa:
+        if not self.pausa or not self._pausa_activa():
             return
         ahora = time.time()
         ataca, defiende = self._roles()
@@ -215,6 +232,10 @@ class PartidoVivo:
         with self.lock:
             if valor not in TACTICAS or self.resultado is not None or valor == self.sim.equipos[lado].tactica:
                 return
+            # cambiar la táctica rehace el partido desde ese minuto: durante una jugada clave en curso la
+            # borraría a mitad de camino (y la pantalla del otro quedaba esperando una jugada que ya no existe)
+            if self.pausa and (self._pausa_activa() or any(e is not None for e in self.eleccion)):
+                raise ValueError("Espera a que termine la jugada clave para cambiar la táctica.")
             # desde el minuto siguiente al que ya vio el que va más adelantado (nadie ve cambiar el pasado)
             t, m = max(self.visto)
             clave = (t, m + 1)

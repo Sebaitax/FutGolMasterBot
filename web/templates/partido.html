@@ -842,12 +842,30 @@
   async function decidir(decision) {
     if (decidiendo) return;
     decidiendo = true;
+    const pendiente = pausa;
     cerrarModal();
     pausa = null;
     bloqueo = clave(...ahora);
-    try {
-      agregar(await api('/api/partido/avanzar', {decision, desde: eventos}));
-    } catch (e) { FGM.toast(e.message, {error: true}); decidiendo = false; return; }
+    // si se corta la red, se reintenta (antes el partido quedaba detenido sin jugada ni avance).
+    // Antes de reenviar se pregunta si la decisión ya llegó, para no aplicarla a la jugada siguiente.
+    for (let intento = 0; ; intento++) {
+      try {
+        let r;
+        if (intento === 0) r = await api('/api/partido/avanzar', {decision, desde: eventos});
+        else {
+          r = await api('/api/partido/avanzar', {desde: eventos});
+          const sigue = r.pausa && pendiente && r.pausa.tipo === pendiente.tipo
+            && r.pausa.minuto === pendiente.minuto && r.pausa.tiempo === pendiente.tiempo;
+          if (sigue) r = await api('/api/partido/avanzar', {decision, desde: eventos});
+        }
+        agregar(r);
+        break;
+      } catch (e) {
+        if (intento >= 5) { location.reload(); return; }   // el servidor rearma el partido tal como iba
+        FGM.toast('Reconectando…', {error: true});
+        await espera(1500 * (intento + 1));
+      }
+    }
     decidiendo = false;
     pintarControles();
     reproducir();

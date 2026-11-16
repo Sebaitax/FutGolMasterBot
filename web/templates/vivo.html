@@ -243,6 +243,17 @@
   // ---------- reproducir minuto a minuto (misma velocidad para los dos)
   async function reproducir() {
     while (true) {
+      try { if (await paso()) return; }
+      catch (e) {   // corte de red o error raro: se cierra la jugada abierta y se reintenta (antes quedaba pegado)
+        modal.hidden = true;
+        $('conexion').textContent = '· reconectando… 🟡';
+        await espera(1500);
+      }
+    }
+  }
+  // un paso de la reproducción; devuelve true cuando el partido terminó
+  async function paso() {
+    {
       if (iMin < posesion.length) {
         const [t, m, eq] = posesion[iMin++];
         ahora = [t, m];
@@ -259,14 +270,15 @@
         }
         if (rivalDesde != null) pintarTacticas();
         await espera(420);
-        continue;
+        return false;
       }
       // al día con lo simulado: ¿pausa, final o seguir pidiendo?
       while (iLinea < lineas.length) escribir(lineas[iLinea++]);
-      if (ult && ult.pausa) { await atenderPausa(ult.pausa); await pedir(); continue; }
-      if (final) { terminar(); return; }
+      if (ult && ult.pausa) { await atenderPausa(ult.pausa); await pedir(); return false; }
+      if (final) { terminar(); return true; }
       await espera(900);
       await pedir();
+      return false;
     }
   }
 
