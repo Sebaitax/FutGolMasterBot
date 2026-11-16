@@ -9,6 +9,13 @@
   </div>
 </section>
 
+{% if usuario %}
+<section class="tarjeta cuenta-caja">
+  <h2>Tu cuenta</h2>
+  <p>{{ '🟢 Google · ' if usuario.google_sub }}{{ usuario.email }}{% if usuario.admin %} · <b>Administrador</b> · <a href="/admin/logs" target="_top">📋 Bitácora</a>{% endif %}</p>
+  <form method="post" action="/salir" target="_top"><button class="boton">🚪 Cerrar sesión</button></form>
+</section>
+{% endif %}
 <section class="tarjeta">
   <h2>Datos del club</h2>
   <div class="form-perfil">

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta">
+  <h2>⚡ En vivo contra amigos</h2>
+  <p class="tenue">Juegan los dos al mismo tiempo, cada uno con su club. En las jugadas clave uno ataca y el otro defiende:
+    eligen a ciegas y se define en un pulso de toques. Las tácticas se cambian en vivo y se contrarrestan.
+    No cuenta para la liga ni deja lesiones.</p>
+  <div id="sala"></div>
+</section>
+<p class="centrado"><a class="enlace" href="/amistosos">← Volver a amistosos</a></p>
+<script>
+(() => {
+  const {api, esc, toast} = FGM;
+  const sala = document.getElementById('sala');
+  let estado = null, apuesta = 0;
+  function pintar() {
+    if (!estado) return;
+    if (estado.partido) { location.href = `/vivo/${estado.partido}`; return; }
+    const otros = estado.otros.map(o => `
+      <div class="vs-rival">
+        <img class="escudo grande" src="/escudo/amigo/${o.pid}" alt="">
+        <div><b>${esc(o.nombre)}</b><small class="tenue">${esc(o.division)} · media ${o.fuerza}</small>
+          ${o.apuesta ? `<small class="vs-apuesta">💰 Apuesta ${o.apuesta.toLocaleString('es-CL')} (el que gana se lleva ${(2 * o.apuesta).toLocaleString('es-CL')})</small>` : ''}
+          <small class="vs-espera">🟢 esperando hace ${Math.max(1, Math.round((Date.now() / 1000 - o.desde) / 60))} min</small></div>
+        <button class="primario" data-r="${o.pid}">⚡ Jugar</button>
+      </div>`).join('');
+    sala.innerHTML = `
+      ${estado.esperando
+        ? `<div class="vs-yo esperando"><span class="vs-pulso"></span><b>Esperando rival…</b>
+             <small class="tenue">Pásale el link a un amigo y dile que entre a ⚡ En vivo. Cuando acepte, el partido empieza solo.</small>
+             <button class="enlace" id="cancelar">Dejar de esperar</button></div>`
+        : `<div class="vs-apuestas"><span>¿Apuesta?</span>${[0, 1000, 5000, 20000].map(a => `<button class="${a === apuesta ? 'activo' : ''}" data-a="${a}">${a ? '💰 ' + a.toLocaleString('es-CL') : 'Sin apuesta'}</button>`).join('')}</div>
+           <button class="primario grande-btn" id="esperar">🙋 Esperar rival</button>`}
+      <h3>Esperando rival ahora</h3>
+      ${otros || '<p class="tenue">Nadie está esperando. Pon tu club en espera y avísale a tus amigos.</p>'}`;
+    const b = document.getElementById('esperar');
+    if (b) b.onclick = async () => { try { estado = await api('/api/vivo/esperar', {apuesta}); pintar(); } catch (e) { toast(e.message, {error: true}); } };
+    sala.querySelectorAll('[data-a]').forEach(x => x.onclick = () => { apuesta = +x.dataset.a; pintar(); });
+    const c = document.getElementById('cancelar');
+    if (c) c.onclick = async () => { await api('/api/vivo/cancelar', {}); refrescar(); };
+    sala.querySelectorAll('[data-r]').forEach(x => x.onclick = async () => {
+      x.disabled = true;
+      try { const r = await api(`/api/vivo/aceptar/${x.dataset.r}`, {}); location.href = `/vivo/${r.partido}`; }
+      catch (e) { toast(e.message, {error: true}); refrescar(); }
+    });
+  }
+  async function refrescar() {
+    try { estado = await (await fetch('/api/vivo/sala')).json(); pintar(); } catch {}
+  }
+  refrescar();
+  setInterval(refrescar, 1500);
+})();
+</script>
+{% endblock %}

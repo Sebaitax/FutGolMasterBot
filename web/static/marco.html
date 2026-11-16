@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FutGolMaster</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0f1512; overflow: hidden; }
+  #juego { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  .musica-yt { position: fixed; left: -400px; top: 0; width: 200px; height: 200px; opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<!-- Marco: la música vive aquí (nunca se recarga) y el juego corre adentro, así la canción no se corta al navegar -->
+<iframe id="juego" title="FutGolMaster" allow="autoplay; vibrate; clipboard-write"></iframe>
+<div class="musica-yt"><div id="musica-yt"></div></div>
+<script>
+(() => {
+  const LISTA = 'PL94p9Gzt5VPBKouIudP9X8oS1jY9ntAaO';
+  const VOLUMEN = 12;
+  // videos de la playlist que se cambian por otra versión (p. ej. el videoclip con ruidos -> versión con letra)
+  const REEMPLAZOS = {
+    'u9WgtlgGAgs': 'EvIG8Gl6038',   // The Cardigans - My Favourite Game: "Stone Version" (videoclip) -> Lyric Video oficial
+  };
+  const leer = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+  const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  let activa = leer('fgm_musica', ios ? '0' : '1') === '1';
+  let enPartido = false, player = null, listo = false, sonando = false;
+
+  const juego = document.getElementById('juego');
+  const destino = decodeURIComponent(location.hash.slice(1)) || '/';
+  juego.src = destino.startsWith('/') && !destino.startsWith('//') ? destino : '/';
+
+  function debeSonar() { return activa && !enPartido; }
+  function aplicar() {
+    if (!listo) return;
+    if (debeSonar()) { player.setVolume(VOLUMEN); if (!sonando) player.playVideo(); }
+    else if (sonando) player.pauseVideo();
+  }
+
+  // lo que usa el juego (misma página de origen) desde adentro del marco
+  window.FGM_MARCO = {
+    get activa() { return activa; },
+    alternar() { activa = !activa; guardar('fgm_musica', activa ? '1' : '0'); aplicar(); return activa; },
+    toque() { aplicar(); },   // un toque en el juego también "despierta" el audio del marco
+    pagina({partido, url, titulo}) {
+      enPartido = !!partido;
+      if (titulo) document.title = titulo;
+      if (url) history.replaceState(null, '', '#' + encodeURIComponent(url));   // al recargar, vuelve a esa página
+      aplicar();
+    },
+  };
+
+  window.onYouTubeIframeAPIReady = () => {
+    player = new YT.Player('musica-yt', {
+      width: 200, height: 200,
+      playerVars: {autoplay: 0, controls: 0, playsinline: 1, disablekb: 1, listType: 'playlist', list: LISTA},
+      events: {
+        onReady: () => {
+          player.setVolume(VOLUMEN);
+          // cuando YouTube entrega la lista: se cambian los videos de REEMPLAZOS, se mezcla y queda lista para sonar
+          let intentos = 0;
+          const armar = () => {
+            const base = player.getPlaylist() || [];
+            if (!base.length && intentos++ < 40) return setTimeout(armar, 250);
+            const ids = base.map(id => REEMPLAZOS[id] || id);
+            for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+            if (!ids.length) { listo = true; aplicar(); return; }
+            // YouTube a veces pisa la lista nueva con la original que aún estaba cargando: se insiste hasta que quede
+            let vueltas = 0;
+            const fijar = () => {
+              const actual = player.getPlaylist() || [];
+              if (actual[0] === ids[0] && actual.length === ids.length) { player.setLoop(true); listo = true; aplicar(); return; }
+              if (vueltas++ > 12) { listo = true; aplicar(); return; }   // si no se deja, suena la original
+              player.cuePlaylist(ids);
+              setTimeout(fijar, 700);
+            };
+            fijar();
+          };
+          armar();
+        },
+        onStateChange: e => {
+          sonando = e.data === YT.PlayerState.PLAYING;
+          if (sonando && !debeSonar()) player.pauseVideo();
+          if (e.data === YT.PlayerState.ENDED) player.nextVideo();
+        },
+        onError: () => { try { player.nextVideo(); } catch {} },
+      },
+    });
+  };
+  const s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

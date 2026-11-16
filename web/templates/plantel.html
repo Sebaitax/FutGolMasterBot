@@ -5,7 +5,7 @@
   <div class="tabs-alin" id="tabs-alin" title="Hasta 5 alineaciones guardadas; la marcada es la que juega"></div>
   <div class="encabezado">
     <h2>Alineación</h2>
-    <span class="etiqueta" id="fuerza" title="Media del once según el puesto de cada uno">Media –</span>
+    <span class="etiqueta" id="fuerza" title="Media: OVR del once según el puesto de cada uno. Efectiva: con la química sumada (es la que juega).">Media –</span>
   </div>
   <div class="controles">
     <label>Formación <select id="formacion"></select></label>
@@ -14,16 +14,27 @@
         {% for m in mentalidades %}<option value="{{ m }}">{{ m|capitalize }}</option>{% endfor %}
       </select>
     </label>
-    <button id="auto" type="button">✨ Automático</button>
+    <div class="auto-menu">
+      <button id="auto" type="button">✨ Automático ▾</button>
+      <div class="auto-pop" id="auto-pop" hidden>
+        <button data-modo="equipo"><b>⚡ Mejor equipo</b><small>la mejor media efectiva (OVR + química), con tu formación</small></button>
+        <button data-modo="huecos"><b>🧩 Completar huecos</b><small>solo llena puestos vacíos, lesionados o suspendidos</small></button>
+        <div class="auto-grupo"><b>🎯 Armar por…</b>
+          <select id="auto-tipo"><option value="liga">🏆 Liga</option><option value="nacion">🌎 País</option><option value="club">🛡️ Club</option></select>
+          <select id="auto-valor"></select>
+          <button data-modo="grupo" class="primario">Armar</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="quimica-medidor" title="Química: mismo club (verde) y misma nación (amarillo) entre compañeros cercanos. Rinde hasta +3%.">
+  <div class="quimica-medidor" title="Química entre compañeros cercanos: mismo club, o misma liga y nación (verde); misma liga o misma nación (amarillo). Química 0 = el once rinde -4%; 100 = +5% (unos 3 puntos de media). Los bots juegan como si tuvieran ~45.">
     <span>Química</span>
     <div class="qm-barra"><i id="qm-barra"></i></div>
     <b id="qm-num">0</b>
   </div>
-  <p class="tenue ayuda">Toca una carta y luego otra para intercambiarlas, o arrástrala. Los cambios se guardan solos.
-    <span class="leyenda"><i class="v2"></i>mismo club <i class="v1"></i>misma nación <i class="v0"></i>sin vínculo</span></p>
+  <p class="tenue ayuda">Toca una carta y luego otra para intercambiarlas, o arrástrala. Toca un puesto y las reservas te muestran cuánto cambia la media efectiva. Los cambios se guardan solos.
+    <span class="leyenda"><i class="v2"></i>mismo club o liga+nación <i class="v1"></i>misma liga o nación <i class="v0"></i>sin vínculo</span></p>
 
   <div class="cancha" id="cancha">
     <div class="lineas">
@@ -35,8 +46,10 @@
   </div>
   <div class="banca-titulo"><h3>Suplentes</h3><small class="tenue">entran en los cambios · arrastra o toca para elegir</small></div>
   <div class="banca-slots" id="banca"></div>
-  <div id="detalle" class="detalle" hidden></div>
 </section>
+
+<div class="col-derecha">
+<section class="tarjeta detalle-jugador" id="detalle" hidden></section>
 
 <section class="tarjeta">
   <div class="encabezado">
@@ -46,11 +59,13 @@
       <button id="modo-vender" class="chico-btn">🪙 Vender varias</button>
     </div>
   </div>
+  <div id="filtro-cartas"></div>
   <div class="filtros" id="filtros">
     <button data-f="" class="activo">Todos</button><button data-f="POR">POR</button><button data-f="DEF">DEF</button><button data-f="MED">MED</button><button data-f="DEL">DEL</button>
   </div>
   <div class="reservas" id="reservas"></div>
 </section>
+</div>
 </div>
 
 <div class="barra-venta" id="barra-venta" hidden>
@@ -63,7 +78,7 @@
 <script>
 (() => {
   const D = JSON.parse(document.getElementById('datos').textContent);
-  const {esc, carta, afinidad, linea, reanimar, api, toast, ETQ} = FGM;
+  const {esc, carta, afinidad, linea, reanimar, api, toast, ETQ, filtroCartas} = FGM;
   const $ = id => document.getElementById(id);
   let porPid = Object.fromEntries(D.fichas.map(f => [f.pid, f]));
   let once = D.once.slice(), formacion = D.formacion, filtro = '', seleccion = null;
@@ -96,8 +111,7 @@
   function valorEnlace(a, b) {
     if (!a || !b) return 0;
     if (a.club && a.club === b.club) return 2;
-    if (a.nacion && a.nacion === b.nacion) return 1;
-    return 0;
+    return (a.liga && a.liga === b.liga ? 1 : 0) + (a.nacion && a.nacion === b.nacion ? 1 : 0);
   }
   function quimica() {
     const puestos = D.formaciones[formacion];
@@ -114,6 +128,19 @@
       return q;
     });
     return {enlaces, jugadores: jug, equipo: Math.round(100 * jug.reduce((a, b) => a + b, 0) / 11)};
+  }
+
+  // ---------- media y media efectiva (como el motor: OVR × afinidad × (0,96 + 0,09 × química))
+  const PISO = 0.96, BONO = 0.09, disponible = f => f && f.estado === 'disponible';
+  function medias(o = once) {
+    const puestos = D.formaciones[formacion], q = quimica(o).jugadores;
+    let m = 0, ef = 0;
+    for (let k = 0; k < 11; k++) {
+      const f = porPid[o[k]]; if (!f) continue;
+      const v = f.ovr * afinidad(f.pos, puestos[k]);
+      m += v; ef += v * (PISO + BONO * q[k]);
+    }
+    return {media: m / 11, efectiva: ef / 11};
   }
 
   // ---------- cancha
@@ -156,10 +183,23 @@
 
   function pintarReservas() {
     const enCancha = new Set(once.filter(Boolean));
-    const lista = D.fichas.filter(f => !enCancha.has(f.pid) && (!filtro || linea(f.pos) === filtro));
+    let lista = D.fichas.filter(f => !enCancha.has(f.pid) && (!filtro || linea(f.pos) === filtro) && fc.pasa(f));
+    // con un puesto del once elegido: cuánto cambia la media efectiva si entra cada reserva (y se ordenan por eso)
+    const slot = seleccion && seleccion.tipo === 'slot' && seleccion.i < 11 && !vendiendo ? seleccion.i : -1;
+    const delta = {};
+    if (slot >= 0) {
+      const base = medias().efectiva;
+      for (const f of lista) { const o = once.slice(); o[slot] = f.pid; delta[f.pid] = medias(o).efectiva - base; }
+      lista = lista.slice().sort((a, b) => delta[b.pid] - delta[a.pid]);
+    }
+    const marcaDelta = pid => {
+      if (!(pid in delta)) return '';
+      const d = delta[pid], txt = (d >= 0 ? '+' : '') + d.toFixed(1);
+      return `<i class="delta-ef ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : ''}" title="Media efectiva si entra en ese puesto">${txt}</i>`;
+    };
     reservas.innerHTML = lista.map(f => carta(f, {
       atrib: 'draggable="true"',
-      extra: marcaRepetida(f.pid) + (vendiendo ? `<i class="check ${aVender.has(f.pid) ? 'si' : ''}">${aVender.has(f.pid) ? '✓' : ''}</i>` : ''),
+      extra: marcaRepetida(f.pid) + marcaDelta(f.pid) + (vendiendo ? `<i class="check ${aVender.has(f.pid) ? 'si' : ''}">${aVender.has(f.pid) ? '✓' : ''}</i>` : ''),
     })).join('') || '<p class="tenue">Todos tus jugadores están en el once o en la banca.</p>';
     $('vender-repetidas').hidden = !repetidas().sobran.size || vendiendo;
     reservas.classList.toggle('vendiendo', vendiendo);
@@ -169,7 +209,8 @@
     }
   }
 
-  function pintar(animar) { pintarCancha(animar); pintarReservas(); pintarDetalle(); }
+  const fc = filtroCartas($('filtro-cartas'), () => D.fichas, () => pintarReservas());
+  function pintar(animar) { pintarCancha(animar); pintarReservas(); pintarDetalle(); mostrarFuerza(); }
 
   // ---------- detalle
   const detalle = $('detalle');
@@ -177,17 +218,30 @@
     const pid = seleccion && (seleccion.tipo === 'slot' ? once[seleccion.i] : seleccion.pid);
     const f = pid && porPid[pid];
     if (!f || vendiendo) { detalle.hidden = true; return; }
+    const NOMBRE_STAT = {PAC: 'Velocidad', SHO: 'Tiro', PAS: 'Pase', DRI: 'Regate', DEF: 'Defensa', PHY: 'Físico'};
     const barras = Object.entries(f.stats).map(([k, v]) =>
-      `<div class="barra-stat"><span>${ETQ[k] || k}</span><i><em style="width:${v}%"></em></i><b>${v}${f.mejora > 1 ? `<small class="plus">+${f.mejora - 1}</small>` : ''}</b></div>`).join('');
-    const estado = f.lesion ? `🚑 Lesionado ${f.lesion} fecha(s)` : f.suspension ? `🟥 Suspendido ${f.suspension} fecha(s)` : '';
+      `<div class="barra-stat"><span>${NOMBRE_STAT[k] || ETQ[k] || k}</span><i><em style="width:${v}%"></em></i><b>${v}${f.mejora > 1 ? `<small class="plus">+${f.mejora - 1}</small>` : ''}</b></div>`).join('');
+    const estado = f.lesion ? `<p class="d-estado">🚑 Lesionado ${f.lesion} fecha(s)</p>` : f.suspension ? `<p class="d-estado">🟥 Suspendido ${f.suspension} fecha(s)</p>` : '';
+    const donde = once.indexOf(f.pid);
+    const rol = donde < 0 ? 'Reserva' : donde < 11 ? 'Titular' : 'Suplente';
     detalle.innerHTML = `
-      <div class="d-cab"><span class="ovr-g ${f.nivel}">${f.ovr}</span>
-        <div><strong>${esc(f.completo)}</strong><small class="tenue">${FGM.pos(f.pos)} · ${esc(f.club)} · ${esc(f.nacion)}</small>
-        <small>${f.pj} PJ · ${f.goles} G · ${f.asis} A${f.amarillas ? ' · 🟨' + f.amarillas : ''} ${estado}</small></div>
-        <a href="/carta/${f.carta}.png" target="_blank" class="enlace">Ver carta</a></div>
+      <button class="enlace d-cerrar" id="d-cerrar" title="Cerrar">✕</button>
+      <div class="d-ficha">
+        <div class="d-carta">${carta(f, {grande: true})}</div>
+        <div class="d-info">
+          <h3>${esc(f.completo)}</h3>
+          <p class="d-club">${FGM.escudo(f.club, 'chico')} ${esc(f.club)}</p>
+          <p>${FGM.bandera(f.nacion, 'texto')} ${esc(f.nacion)}</p>
+          <p class="tenue">${esc(FGM.pos(f.pos))} · ${rol} · Media <b>${f.ovr}</b>${f.mejora > 1 ? ` <small class="plus">+${f.mejora - 1}</small>` : ''}</p>
+          <p class="tenue">${f.pj} PJ · ${f.goles} G · ${f.asis} A${f.amarillas ? ' · 🟨 ' + f.amarillas : ''}</p>
+          ${estado}
+        </div>
+      </div>
       <div class="barras">${barras}</div>
-      <div class="d-vender"><button class="enlace" id="vender-uno">Vender · 🪙 ${f.venta.toLocaleString('es-CL')}</button></div>`;
+      <div class="d-vender"><a href="/carta/${f.carta}.png" target="_blank" class="enlace">Ver carta</a>
+        <button class="enlace" id="vender-uno">Vender · 🪙 ${f.venta.toLocaleString('es-CL')}</button></div>`;
     $('vender-uno').onclick = () => vender([f.pid]);
+    $('d-cerrar').onclick = () => { seleccion = null; pintar(); };
     detalle.hidden = false;
     reanimar(detalle, 'entra');
   }
@@ -254,24 +308,117 @@
   });
 
   // ---------- guardar alineación
-  function mostrarFuerza(v) { $('fuerza').textContent = 'Media ' + v.toFixed(1); reanimar($('fuerza'), 'pulso'); }
+  let efAnterior = null;
+  function mostrarFuerza() {
+    const {media, efectiva} = medias();
+    $('fuerza').innerHTML = `Media ${media.toFixed(1)} · <b>Efectiva ${efectiva.toFixed(1)}</b>`;
+    if (efAnterior !== null && Math.abs(efAnterior - efectiva) > 0.05) reanimar($('fuerza'), 'pulso');
+    efAnterior = efectiva;
+  }
   let timer = null;
-  function guardar(auto = false) {
+  function guardar(auto = false, silencio = false) {
     clearTimeout(timer);
     return new Promise(ok => timer = setTimeout(async () => {
       try {
         const j = await api('/api/alineacion', {formacion, mentalidad: $('mentalidad').value, once, auto});
-        mostrarFuerza(j.fuerza); toast('Guardado ✓'); ok(j);
+        if (!silencio) toast('Guardado ✓'); ok(j);
       } catch (e) { toast(e.message, {error: true}); ok(null); }
     }, auto ? 0 : 350));
   }
   selF.addEventListener('change', () => { formacion = selF.value; seleccion = null; pintar(); guardar(); });
   $('mentalidad').addEventListener('change', () => guardar());
-  $('auto').addEventListener('click', async () => {
-    const j = await guardar(true);
-    if (!j) return;
-    const cambiados = j.once.map((pid, i) => pid !== once[i] ? i : -1).filter(i => i >= 0);
-    once = j.once; seleccion = null; pintar(cambiados);
+  // ---------- automático: arma el once en el navegador (con tu formación) y deja deshacer
+  const pop = $('auto-pop');
+  $('auto').addEventListener('click', e => { e.stopPropagation(); pop.hidden = !pop.hidden; if (!pop.hidden) valoresGrupo(); });
+  document.addEventListener('click', e => { if (!pop.hidden && !e.target.closest('.auto-menu')) pop.hidden = true; });
+  function valoresGrupo() {
+    const k = $('auto-tipo').value, cuenta = {};
+    D.fichas.filter(disponible).forEach(f => { if (f[k]) cuenta[f[k]] = (cuenta[f[k]] || 0) + 1; });
+    const actual = $('auto-valor').value;
+    $('auto-valor').innerHTML = Object.entries(cuenta).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
+      .map(([v, n]) => `<option value="${esc(v)}" ${v === actual ? 'selected' : ''}>${esc(v)} (${n})</option>`).join('');
+  }
+  $('auto-tipo').addEventListener('change', valoresGrupo);
+
+  function armar(modo) {
+    const puestos = D.formaciones[formacion];
+    const grupoK = $('auto-tipo').value, grupoV = $('auto-valor').value;
+    const delGrupo = f => modo === 'grupo' && f[grupoK] === grupoV;
+    // puntaje: media efectiva; en "armar por…" cada jugador del grupo vale mucho más (entra primero)
+    const puntaje = o => medias(o).efectiva * 11 + (modo === 'grupo' ? 1000 * o.slice(0, 11).filter(pid => delGrupo(porPid[pid])).length : 0);
+    let o = once.slice();
+    const fijo = new Set();
+    if (modo === 'huecos') {
+      for (let k = 0; k < 11; k++) if (disponible(porPid[o[k]])) fijo.add(k); else o[k] = null;
+    } else {
+      for (let k = 0; k < 11; k++) o[k] = null;
+    }
+    const libres = () => D.fichas.filter(f => disponible(f) && !o.slice(0, 11).includes(f.pid));
+    // 1) relleno codicioso: primero el arquero, cada puesto con quien más suma
+    for (const k of [...Array(11).keys()].sort((a, b) => (puestos[b] === 'GK') - (puestos[a] === 'GK'))) {
+      if (o[k]) continue;
+      let mejor = null, mp = -Infinity;
+      for (const f of libres()) {
+        const v = f.ovr * afinidad(f.pos, puestos[k]) + (delGrupo(f) ? 1000 : 0);
+        if (v > mp) { mp = v; mejor = f; }
+      }
+      if (mejor) o[k] = mejor.pid;
+    }
+    // 2) mejora local: cambiar un titular por una reserva o dos titulares entre sí, mientras suba el puntaje
+    for (let vuelta = 0; vuelta < 40; vuelta++) {
+      let mejorO = null, mp = puntaje(o) + 1e-6;
+      const cand = libres();
+      for (let k = 0; k < 11; k++) {
+        if (fijo.has(k)) continue;
+        for (const f of cand) {
+          const t = o.slice(); t[k] = f.pid;
+          const v = puntaje(t); if (v > mp) { mp = v; mejorO = t; }
+        }
+        for (let m = k + 1; m < 11; m++) {
+          if (fijo.has(m)) continue;
+          const t = o.slice(); [t[k], t[m]] = [t[m], t[k]];
+          const v = puntaje(t); if (v > mp) { mp = v; mejorO = t; }
+        }
+      }
+      if (!mejorO) break;
+      o = mejorO;
+    }
+    // 3) banca. "Completar huecos" respeta tus suplentes (solo saca a los no disponibles);
+    //    "Mejor equipo" y "Armar por…" la arman de nuevo: un arquero, al menos uno por línea
+    //    (defensa, medio, ataque) y el resto los mejores (en "Armar por…", primero los del grupo)
+    const enOnce = new Set(o.slice(0, 11).filter(Boolean));
+    const banca = modo === 'huecos' ? once.slice(11).filter(pid => pid && disponible(porPid[pid]) && !enOnce.has(pid)) : [];
+    const valor = f => f.ovr + (delGrupo(f) ? 1000 : 0);
+    const resto = D.fichas.filter(f => disponible(f) && !enOnce.has(f.pid) && !banca.includes(f.pid)).sort((a, b) => valor(b) - valor(a));
+    const sumar = f => { if (f) { banca.push(f.pid); resto.splice(resto.indexOf(f), 1); } };
+    if (!banca.some(pid => porPid[pid].pos === 'GK')) sumar(resto.find(f => f.pos === 'GK'));
+    for (const l of ['DEF', 'MED', 'DEL'])
+      if (!banca.some(pid => linea(porPid[pid].pos) === l)) sumar(resto.find(f => f.pos !== 'GK' && linea(f.pos) === l));
+    const campo = resto.filter(f => f.pos !== 'GK');   // no más de un arquero suplente
+    while (banca.length < TOTAL - TITULARES && campo.length) banca.push(campo.shift().pid);
+    return o.slice(0, 11).concat(banca.slice(0, TOTAL - TITULARES), Array(TOTAL).fill(null)).slice(0, TOTAL);
+  }
+
+  pop.addEventListener('click', e => {
+    const b = e.target.closest('[data-modo]'); if (!b) return;
+    if (b.dataset.modo === 'grupo' && !$('auto-valor').value) return;
+    pop.hidden = true;
+    const antes = once.slice(), qAntes = quimica().equipo, efAntes = medias().efectiva;
+    const nuevo = armar(b.dataset.modo);
+    // misma banca en otro orden: se deja como estaba (no es un cambio)
+    const clave = l => l.slice(TITULARES).filter(Boolean).sort().join();
+    if (clave(nuevo) === clave(once)) for (let i = TITULARES; i < TOTAL; i++) nuevo[i] = once[i];
+    const cambiados = nuevo.map((pid, i) => pid !== once[i] ? i : -1).filter(i => i >= 0);
+    if (!cambiados.length) { toast('Tu equipo ya es el mejor para eso 👌'); return; }
+    const enBancaAntes = new Set(once.slice(TITULARES).filter(Boolean));
+    const nuevosBanca = nuevo.slice(TITULARES).filter(pid => pid && !enBancaAntes.has(pid)).length;
+    once = nuevo; seleccion = null; pintar(cambiados); guardar(false, true);
+    const ef = medias().efectiva;
+    toast(`✨ Química ${qAntes} → ${quimica().equipo} · Efectiva ${efAntes.toFixed(1)} → ${ef.toFixed(1)}`
+      + (nuevosBanca ? ` · ${nuevosBanca} suplente${nuevosBanca === 1 ? '' : 's'} nuevo${nuevosBanca === 1 ? '' : 's'}` : ''), {
+      accion: 'Deshacer', ms: 9000,
+      alHacer: () => { const c = once.map((pid, i) => pid !== antes[i] ? i : -1).filter(i => i >= 0); once = antes; pintar(c); guardar(); },
+    });
   });
 
   // ---------- vender (una o varias) con deshacer
@@ -320,7 +467,6 @@
   }
 
   pintar();
-  mostrarFuerza(D.fuerza);
 
   // ---------- alineaciones guardadas (hasta 5)
   function pintarTabs() {

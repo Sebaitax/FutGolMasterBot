@@ -217,11 +217,7 @@ input:focus, select:focus { border-color: var(--verde); outline: none; box-shado
 @media (min-width: 1200px) {
   .dos-col { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; align-items: start; }
   .dos-col > .tarjeta:last-child { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }
-  .partido-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
-  .partido-grid .relato { max-height: 62vh; }
-}
-@media (min-width: 1024px) and (max-width: 1199px) {
-  .partido-grid .relato { max-height: 42vh; }
+  .dos-col > .col-derecha { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }
 }
 
 /* ---------- inicio ---------- */
@@ -296,7 +292,6 @@ input:focus, select:focus { border-color: var(--verde); outline: none; box-shado
   .controles { grid-template-columns: 1fr 1fr; }
   .controles button { grid-column: span 2; }
   .tabla { font-size: .82rem; }
-  .credito { font-size: .65rem; }
 }
 @media (max-width: 380px) {
   .menu .menu-item span { font-size: .6rem; }
@@ -384,3 +379,48 @@ input:focus, select:focus { border-color: var(--verde); outline: none; box-shado
 /* "×2" de repetidas en la esquina superior derecha (deja libre el "+N" junto a la media) */
 .mini .repetida { left: auto; right: 5%; top: 3%; transform: none; }
 .mini .m-plus { font-size: .46em; }
+
+/* =====================================================================
+   Cartas mejoradas: mantienen su color (oro/plata/bronce) y cada nivel
+   se nota más: borde más marcado, más brillo interior y destello más seguido.
+   (Los colores distintos quedan libres para cartas especiales, tipo TOTS.)
+   ===================================================================== */
+.mini.oro { --tono: 255, 226, 120; }
+.mini.plata { --tono: 235, 245, 255; }
+.mini.bronce { --tono: 255, 200, 150; }
+/* aura: capa encima de la carta con marco claro que se engruesa y resplandor del tono que crece */
+.mini .m-aura { position: absolute; inset: 0; z-index: 2; pointer-events: none; border-style: solid; mix-blend-mode: screen; }
+.mini.mej2 .m-aura { border-width: 2px; border-color: rgba(var(--tono), .9);
+  box-shadow: inset 0 0 10px 2px rgba(var(--tono), .55); }
+.mini.mej3 .m-aura { border-width: 3px; border-color: rgb(var(--tono));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7), inset 0 0 18px 5px rgba(var(--tono), .75);
+  background: radial-gradient(120% 60% at 50% 0%, rgba(var(--tono), .25), transparent 60%); }
+.mini.mej4 .m-aura { border-width: 4px; border-color: #fff;
+  box-shadow: inset 0 0 0 3px rgb(var(--tono)), inset 0 0 20px 6px rgba(var(--tono), .8);
+  background: radial-gradient(120% 70% at 50% 0%, rgba(var(--tono), .28), transparent 65%); }
+.mini.mej5 .m-aura { border-width: 5px; border-color: #fff;
+  box-shadow: inset 0 0 0 4px rgb(var(--tono)), inset 0 0 0 5px #fff, inset 0 0 24px 8px rgba(var(--tono), .9);
+  background: radial-gradient(130% 80% at 50% 0%, rgba(var(--tono), .32), transparent 70%);
+  animation: aura-carta 2.2s ease-in-out infinite; }
+@keyframes aura-carta { 50% { box-shadow: inset 0 0 0 4px rgb(var(--tono)), inset 0 0 0 5px #fff, inset 0 0 30px 10px rgba(255, 255, 255, .6); } }
+/* textura: más destellos a mayor nivel */
+.mini.mej3::before, .mini.mej4::before, .mini.mej5::before {
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .1) 0 2px, transparent 2px 9px),
+    radial-gradient(circle at 78% 18%, rgba(255, 255, 255, var(--chispa)) 0 1.5%, transparent 2.5%),
+    radial-gradient(circle at 18% 62%, rgba(255, 255, 255, var(--chispa)) 0 1.2%, transparent 2.2%),
+    radial-gradient(circle at 60% 48%, rgba(255, 255, 255, var(--chispa)) 0 1%, transparent 2%);
+}
+.mini.mej3 { --chispa: .45; } .mini.mej4 { --chispa: .7; } .mini.mej5 { --chispa: .95; }
+/* destello que cruza la carta: más seguido y más fuerte a mayor nivel */
+.mini.mej2::after, .mini.mej3::after, .mini.mej4::after, .mini.mej5::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, var(--destello, .5)) 48%, transparent 58%);
+  transform: translateX(-130%); animation: brillo-carta var(--ritmo, 6s) ease-in-out infinite;
+}
+.mini.mej2 { --ritmo: 5.5s; --destello: .5; }
+.mini.mej3 { --ritmo: 4.5s; --destello: .6; }
+.mini.mej4 { --ritmo: 3.5s; --destello: .7; }
+.mini.mej5 { --ritmo: 2.5s; --destello: .85; }
+.mini.mej4 .m-nombre, .mini.mej5 .m-nombre { border-top-color: rgb(var(--tono)); box-shadow: 0 -4px 12px rgba(var(--tono), .45); }
+.mini.mej4 .m-mejora, .mini.mej5 .m-mejora { color: #fff; text-shadow: 0 0 6px rgb(var(--tono)), 0 0 2px #000; }
+@media (prefers-reduced-motion: reduce) { .mini .m-aura, .mini[class*="mej"]::after { animation: none; } }

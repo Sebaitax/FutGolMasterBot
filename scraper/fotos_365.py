@@ -58,7 +58,7 @@ CREDITOS = RENDERS / "creditos.json"
 PARAMS = {"appTypeId": 5, "langId": 29, "timezoneName": "America/Santiago"}
 
 # competición de cada liga en 365Scores y nombres de club que no coinciden con los nuestros
-COMPETICION = {"chile": 135, "argentina": 72, "brasil": 113}
+COMPETICION = {"chile": 135, "argentina": 72, "brasil": 113, "espana": 11, "inglaterra": 7, "mls": 104, "italia": 17, "alemania": 25, "francia": 35}
 ALIAS_CLUB = {
     "Cobresal": "Deportes Cobresal",
     "Universidad de Concepción": "U. de Concepción",
@@ -121,9 +121,12 @@ def clubes(competicion: int) -> dict[str, int]:
             for s in datos.get("standings", []) for r in s.get("rows", [])}
 
 
-def plantel(club_id: int) -> list[dict]:
+def plantel(club_id: int, con_cuerpo_tecnico: bool = False) -> list[dict]:
+    """Jugadores del club. 365Scores incluye al cuerpo técnico (posición id 0: entrenador,
+    asistentes...); se excluye salvo que se pida."""
     datos = _api("squads", competitors=club_id)
-    return [a for s in datos.get("squads", []) for a in s.get("athletes", [])]
+    return [a for s in datos.get("squads", []) for a in s.get("athletes", [])
+            if con_cuerpo_tecnico or (a.get("position") or {}).get("id")]
 
 
 def puntaje(carta: dict, atleta: dict) -> float:

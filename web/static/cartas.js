@@ -57,10 +57,10 @@ window.FGM = (() => {
     const anillo = q === undefined ? '' : `<i class="quim q${q >= 0.75 ? 3 : q >= 0.4 ? 2 : q > 0 ? 1 : 0}" title="Química ${Math.round(q * 100)}">${'◆'.repeat(q >= 0.75 ? 3 : q >= 0.4 ? 2 : q > 0 ? 1 : 0) || '◇'}</i>`;
     const esc_ = (f.club ? `<span class="m-club" title="${esc(f.club)}">${escudo(f.club)}</span>` : '')
       + (f.nacion && !opts.sinBandera ? `<span class="m-nac">${bandera(f.nacion)}</span>` : '');
-    return `<div class="mini ${nv}${fuera ? ' fuera' : ''}${opts.grande ? ' grande' : ''}" ${f.pid ? `data-pid="${f.pid}"` : ''} ${opts.atrib || ''}>
+    return `<div class="mini ${nv}${f.mejora > 1 ? ' mej' + Math.min(f.mejora, 5) : ''}${fuera ? ' fuera' : ''}${opts.grande ? ' grande' : ''}" ${f.pid ? `data-pid="${f.pid}"` : ''} ${opts.atrib || ''}>
       <b class="m-ovr">${f.ovr}${f.mejora > 1 ? `<i class="m-plus" title="Mejorada: +${f.mejora - 1} sobre su media base">+${f.mejora - 1}</i>` : ''}</b><span class="m-pos">${esc(pos(f.pos))}</span>${f.mejora > 1 ? `<i class="m-mejora" title="Nivel ${f.mejora}: +${f.mejora - 1} de media">${'★'.repeat(f.mejora - 1)}</i>` : ''}${esc_}
       ${f.render ? `<img class="m-render" src="${f.render}" alt="" loading="lazy">` : '<span class="m-silueta"></span>'}
-      <span class="m-nombre">${esc(f.nombre)}</span>${marca}${anillo}${opts.extra || ''}</div>`;
+      <span class="m-nombre">${esc(f.nombre)}</span>${f.mejora > 1 ? '<i class="m-aura"></i>' : ''}${marca}${anillo}${opts.extra || ''}</div>`;
   }
 
   // Objeto de colección (escudo o estadio). grande = versión para la apertura de sobres
@@ -117,6 +117,7 @@ window.FGM = (() => {
   async function api(url, cuerpo) {
     const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(cuerpo || {})});
     const j = await r.json().catch(() => ({error: 'Error del servidor'}));
+    if (r.status >= 500 && window.FGM_LOG) FGM_LOG({tipo: 'api', mensaje: j.error || 'Error del servidor', url, estado: r.status});
     if (!r.ok) throw new Error(j.error || 'Error');
     return j;
   }
@@ -131,5 +132,60 @@ window.FGM = (() => {
     reanimar(el, 'pulso');
   }
 
-  return {objeto, LINEA, ETQ, esc, linea, pos, nivel, afinidad, escudo, escudoUrl, bandera, carta, reanimar, contar, confeti, toast, api, monedas};
+  // Filtros de liga / país / club (+ búsqueda opcional). Las opciones se cruzan entre sí y muestran cuántas cartas hay.
+  function filtroCartas(cont, fichas, alCambiar, {buscar = true} = {}) {
+    const CAMPOS = [['liga', '🏆 Liga'], ['nacion', '🌎 País'], ['club', '🛡️ Club']];
+    const sel = {liga: '', nacion: '', club: ''};
+    cont.classList.add('filtro-cartas');
+    cont.innerHTML = (buscar ? '<input type="search" class="fc-buscar" placeholder="Buscar jugador…">' : '') +
+      CAMPOS.map(([k]) => `<select data-k="${k}"></select>`).join('') +
+      '<button type="button" class="fc-limpiar enlace" hidden>✕ Limpiar</button>';
+    const input = cont.querySelector('.fc-buscar'), limpiar = cont.querySelector('.fc-limpiar');
+    const norm = t => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const pasa = (f, salvo) => CAMPOS.every(([k]) => k === salvo || !sel[k] || f[k] === sel[k]) &&
+      (!input || !input.value.trim() || norm(`${f.completo || f.nombre} ${f.club} ${f.nacion}`).includes(norm(input.value.trim())));
+    function refrescar() {
+      const todas = fichas();
+      for (const [k, etq] of CAMPOS) {
+        const cuenta = {};
+        for (const f of todas) if (f[k] && pasa(f, k)) cuenta[f[k]] = (cuenta[f[k]] || 0) + 1;
+        if (sel[k] && !cuenta[sel[k]]) cuenta[sel[k]] = 0;
+        const s = cont.querySelector(`[data-k="${k}"]`);
+        s.innerHTML = `<option value="">${etq}: todas</option>` + Object.keys(cuenta).sort((a, b) => a.localeCompare(b, 'es'))
+          .map(v => `<option value="${esc(v)}" ${v === sel[k] ? 'selected' : ''}>${esc(v)} (${cuenta[v]})</option>`).join('');
+        s.classList.toggle('activo', !!sel[k]);
+      }
+      limpiar.hidden = !CAMPOS.some(([k]) => sel[k]) && !(input && input.value);
+    }
+    cont.addEventListener('change', e => { const k = e.target.dataset.k; if (!k) return; sel[k] = e.target.value; refrescar(); alCambiar(); });
+    if (input) input.addEventListener('input', () => { refrescar(); alCambiar(); });
+    limpiar.onclick = () => { for (const [k] of CAMPOS) sel[k] = ''; if (input) input.value = ''; refrescar(); alCambiar(); };
+    refrescar();
+    return {pasa: f => pasa(f), refrescar};
+  }
+
+  // Guía de tácticas: el ciclo de quién le gana a quién, con el porqué (partido y en vivo)
+  const PORQUE = {
+    presion: 'los aprietas arriba y no alcanzan a tirar el centro',
+    centros: 'aunque se cierren atrás, igual les llueven centros y cabezazos',
+    cuidar: 'cerrado atrás, el contragolpe no encuentra espacios',
+    contragolpe: 'el rival adelantado deja la espalda libre para la contra',
+  };
+  function guiaTacticas(tacticas, vence) {
+    const inicio = Object.keys(vence)[0];
+    const ciclo = [];
+    for (let k = inicio; k && !ciclo.includes(k); k = vence[k]) ciclo.push(k);
+    const t = k => `<b>${tacticas[k].ico} ${esc(tacticas[k].nombre)}</b>`;
+    return `<p class="tg-titulo">Cada táctica le gana a una y pierde con otra (como piedra, papel o tijera):</p>
+      <ol class="tg-ciclo">${ciclo.map(k => `<li>${t(k)} <span>le gana a</span> ${t(vence[k])}
+        ${PORQUE[k] ? `<small>${esc(PORQUE[k])}</small>` : ''}</li>`).join('')}</ol>
+      <ul class="tg-notas">
+        <li>Si le ganas a la del rival, llegas <b>+25%</b> más al arco y él <b>-15%</b>.</li>
+        <li>${tacticas.normal ? t('normal') : 'Normal'} no le gana ni pierde con nadie: es la segura.</li>
+        <li>Cuando el rival cambia, tardas unos minutos en "leer" su táctica nueva. Ahí es cuando conviene cambiar la tuya.</li>
+        <li>En la etiqueta del rival ves si <b>le ganas</b> o si <b>te está ganando</b>.</li>
+      </ul>`;
+  }
+
+  return {guiaTacticas, objeto, LINEA, ETQ, esc, linea, pos, nivel, afinidad, escudo, escudoUrl, bandera, carta, reanimar, contar, confeti, toast, api, monedas, filtroCartas};
 })();

@@ -19,14 +19,17 @@ uvicorn web.app:app --reload    # abre http://127.0.0.1:8000
 
 Para probar desde el celular en la misma red: `uvicorn web.app:app --host 0.0.0.0` y abre `http://<IP-de-tu-PC>:8000`.
 
-Necesita los catálogos de cartas en `data/cartas_liga_*_2026.csv`. Para generarlos (Chile y Argentina; se pueden sumar ligas en `scraper/ligas.py`):
+Necesita los catálogos de cartas en `data/cartas_liga_*_2026.csv` (Chile, Argentina y Brasil; se pueden sumar ligas en `scraper/ligas.py` y su id de 365Scores en `scraper/fotos_365.py`). Para generarlos:
 
 ```bash
-python -m scraper.plantillas --liga chile        # planteles (Wikipedia)
-python -m scraper.estadisticas --liga chile      # tabla, goles, arqueros y perfiles (Wikipedia + Wikidata)
-python -m cartas.valoracion --liga chile         # OVR, atributos y precio
-# lo mismo con --liga argentina
+python -m scraper.liga_365 --liga chile          # planteles actuales y estadísticas de la temporada (365Scores)
+python -m cartas.valoracion --liga chile         # OVR (sobre todo por el puntaje de 365Scores), atributos y precio
+python -m scraper.fotos_365 --liga chile         # fotos de los jugadores (quita el fondo con rembg)
+python -m scraper.fotos_365 --liga chile --escudos
+# lo mismo con --liga argentina y --liga brasil
 ```
+
+Los jugadores sin foto en 365Scores (casi siempre juveniles) quedan fuera del catálogo. El cuerpo técnico no se incluye.
 
 La partida se guarda en `data/partida.sqlite`.
 
@@ -49,9 +52,9 @@ python -m scripts.simular_carrera --carreras 8 --temporadas 4 --estrategia plata
 Las cartas usan `assets/renders/<Nombre>.png` si existe (si no, una silueta). Esa carpeta no se sube a GitHub.
 
 ```bash
-# Automático: fotos con licencia libre de Wikimedia Commons (autor y licencia en assets/renders/creditos.json)
-python -m scraper.fotos --liga chile --recortar     # --recortar quita el fondo (pip install rembg)
-python -m scraper.fotos --liga argentina --club "Boca Juniors" --forzar --recortar
+# Automático: fotos de 365Scores (solo para uso local)
+python -m scraper.fotos_365 --liga chile
+python -m scraper.fotos_365 --url https://www.365scores.com/es/football/player/mateo-mendoza-125772
 
 # Manual: lista de faltantes con enlaces de búsqueda, y luego importar lo que bajes
 python -m scraper.renders_manual pendientes --min-ovr 70   # abre data/renders_pendientes.html
@@ -59,7 +62,7 @@ python -m scraper.renders_manual pendientes --min-ovr 70   # abre data/renders_p
 python -m scraper.renders_manual importar
 ```
 
-Los escudos van en `assets/escudos/<club>.png` (paquete PNG de footylogos.com, uso interno).
+Los escudos van en `assets/escudos/<club>.png` (`python -m scraper.fotos_365 --liga <liga> --escudos`).
 
 ## 🤖 Bot de Discord (en pausa)
 

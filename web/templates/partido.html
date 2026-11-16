@@ -8,12 +8,22 @@
     <div class="mv-reloj"><span id="reloj">0'</span><small id="periodo">1T</small></div>
   </div>
   <div class="mv-equipo">{{ escudo(partido.visita, "grande") }}<span>{{ partido.visita }}</span></div>
-  <p class="mv-estadio">🏟️ {{ partido.estadio }}{% if partido.tipo == "amistoso" %} · <b>Amistoso</b>{% endif %}</p>
+  <p class="mv-estadio">{% if partido.arena %}{{ partido.arena.ico }} <b>{{ partido.arena.nombre }}</b> · {{ partido.arena.bandera }} · Partido por copas{% else %}🏟️ {{ partido.estadio }}{% if partido.tipo == "amistoso" %} · <b>Amistoso</b>{% endif %}{% endif %}</p>
 </section>
 
 <div class="partido-grid">
 <section class="tarjeta">
-  <div class="estadio" id="estadio">
+  <div class="controles-vivo">
+    <button id="btn-pausa" class="chico-btn" hidden>⏸ Cambios</button>
+    {# en vivo se juega a velocidad normal (juego online): sin acelerar ni saltar; en repeticiones sí #}
+    <div class="velocidad" id="velocidad"{% if partido.modo == "vivo" %} hidden{% endif %}>
+      <button data-v="1" class="activo">x1</button><button data-v="2">x2</button><button data-v="4">x4</button>
+    </div>
+    <button id="sonido" class="chico-btn" title="Sonido">🔊</button>
+    <button id="saltar" class="enlace"{% if partido.modo == "vivo" %} hidden{% endif %}>Saltar ⏭</button>
+  </div>
+
+  <div class="estadio{% if partido.arena %} arena-{{ partido.arena.tema }}{% endif %}" id="estadio">
     <div class="pasto"></div>
     <div class="lin medio"></div><div class="lin circulo"></div>
     <div class="lin area izq"></div><div class="lin area der"></div>
@@ -26,6 +36,17 @@
     <div class="anuncio" id="anuncio"></div>
   </div>
 
+  <!-- relato: solo la última jugada; el historial completo queda plegado -->
+  <div class="relato-actual" id="relato-actual" aria-live="polite"></div>
+
+  {% if partido.modo != "repeticion" %}
+  <div class="tacticas" id="tacticas" hidden>
+    <div class="t-cab"><b>Táctica</b><small class="tenue" id="t-espera"></small><small class="t-rival" id="t-rival"></small><button class="t-ayuda enlace" id="t-ayuda" type="button">❓ ¿Cuál le gana a cuál?</button></div>
+    <div class="t-guia" id="t-guia" hidden></div>
+    <div class="t-chips" id="t-chips"></div>
+  </div>
+  {% endif %}
+
   <div class="prob" id="prob" hidden>
     <div class="prob-barra"><i id="pb0"></i><i id="pbe"></i><i id="pb1"></i></div>
     <div class="prob-txt"><span id="pt0"></span><span id="pte"></span><span id="pt1"></span></div>
@@ -35,23 +56,10 @@
     <div class="mo-pie"><span id="pos0">50%</span><small>posesión</small><span id="pos1">50%</span></div>
   </div>
 
-  {% if partido.modo != "repeticion" %}
-  <div class="tacticas" id="tacticas" hidden>
-    <div class="t-cab"><b>Táctica</b><small class="tenue" id="t-espera"></small><small class="t-rival" id="t-rival"></small></div>
-    <div class="t-chips" id="t-chips"></div>
-  </div>
-  {% endif %}
-  <div class="controles-vivo">
-    <button id="btn-pausa" class="chico-btn" hidden>⏸ Cambios</button>
-    <div class="velocidad" id="velocidad">
-      <button data-v="1" class="activo">x1</button><button data-v="2">x2</button><button data-v="4">x4</button>
-    </div>
-    <button id="saltar" class="enlace">Saltar ⏭</button>
-  </div>
-</section>
-
-<section class="tarjeta">
-  <ol id="relato" class="relato"></ol>
+  <details class="relato-todo">
+    <summary>📜 Relato completo</summary>
+    <ol id="relato" class="relato"></ol>
+  </details>
 </section>
 </div>
 
@@ -64,10 +72,27 @@
 
 <script id="datos" type="application/json">{{ datos|safe }}</script>
 <script>
+  const S = window.FGM_SONIDO;
+  {
+    const b = document.getElementById('sonido');
+    const pintar = () => {
+      b.textContent = !S.activo ? '🔇' : S.bloqueado() ? '🔈 Toca para activar' : '🔊';
+      b.classList.toggle('activo', S.activo && !S.bloqueado()); b.classList.toggle('latiendo', S.activo && S.bloqueado());
+    };
+    b.onclick = () => { if (S.activo && S.bloqueado()) S.silbato(1, 0.15); else { S.alternar(); if (!S.activo) S.ambiente(false); } setTimeout(pintar, 150); };
+    addEventListener('pointerdown', () => setTimeout(pintar, 150));
+    pintar();
+  }
 (() => {
   const D = JSON.parse(document.getElementById('datos').textContent);
   const {esc, carta, reanimar, confeti, api} = FGM;
   const $ = id => document.getElementById(id);
+
+  // guía: qué táctica le gana a cuál
+  if ($('t-guia')) {
+    $('t-guia').innerHTML = FGM.guiaTacticas(D.tacticas, D.vence);
+    $('t-ayuda').onclick = () => { const g = $('t-guia'); g.hidden = !g.hidden; $('t-ayuda').textContent = g.hidden ? '❓ ¿Cuál le gana a cuál?' : '✕ Cerrar guía'; };
+  }
   const relato = $('relato'), pelota = $('pelota'), anuncio = $('anuncio'), estadio = $('estadio'), capa = $('fichas');
   const nombres = [D.local, D.visita];
   const VIVO = D.modo === 'vivo';
@@ -173,6 +198,7 @@
   }
   async function pasar(f, ms = 380, opts) {
     if (!f) return;
+    if (!saltando) S.patada();
     portador(f);
     await pelotaA(f.x + (f.eq === 0 ? 1.3 : -1.3), f.y + 1.6, ms, opts);
   }
@@ -197,6 +223,11 @@
     const texto = esc(l.texto).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
     li.innerHTML = (l.minuto ? `<b>${esc(l.minuto)}</b>` : '') + `<span>${texto}</span>`;
     relato.prepend(li);
+    // arriba solo se ve la jugada actual (reemplaza a la anterior, sin cascada)
+    const actual = $('relato-actual');
+    actual.className = 'relato-actual ' + l.tipo + (l.equipo === D.lado ? ' propio' : '');
+    actual.innerHTML = li.innerHTML;
+    actual.classList.remove('cambia'); void actual.offsetWidth; actual.classList.add('cambia');
     if (l.marcador && l.tipo !== 'gol') { goles[0] = l.marcador[0]; goles[1] = l.marcador[1]; }
   }
 
@@ -219,7 +250,7 @@
       const f = buscar(l.equipo, l.jugador);
       if (f) f.el.classList.add('amonestado');
     } else if (l.tipo === 'tactica' && l.equipo !== D.lado) {
-      vivo.tactica_rival = l.tactica; pintarControles();
+      vivo.tactica_rival = l.tactica; vivo.rival_desde = absoluto(l.tiempo, l.min); pintarControles();
     } else if (l.tipo === 'gol' && saltando) {
       goles[0] = l.marcador[0]; goles[1] = l.marcador[1];
     }
@@ -270,8 +301,10 @@
     }
     portador(null);
     const destinoX = l.tipo === 'atajada' ? (eqT === 0 ? 96 : 4) : (eqT === 0 ? 99.3 : 0.7) + (l.tipo === 'desviado' ? dir * 2 : 0);
+    if (!saltando) S.patada(true);
     await pelotaA(destinoX, ty, l.penal ? 360 : 320, {alto: .3});
     if (l.tipo === 'gol') {
+      if (!saltando) S.gol(eqT === D.lado);
       marcarGol(l); escribir(l);
       // festejo: los compañeros van hacia el goleador
       if (tir && !saltando) activas(eqT).filter(f => f.puesto !== 'GK').forEach(f => ubicar(f, tir.x - dir * rnd(2, 8), tir.y + rnd(-8, 8), 900));
@@ -279,6 +312,7 @@
       formar(-1, 1, 800);
       await pelotaA(50, 50, 500);
     } else {
+      if (!saltando) S.uy();
       escribir(l);
       if (l.tipo === 'atajada') { anunciar('<b>🧤 ¡Atajada!</b>', 'atajada', 1100); await pelotaA(eqT === 0 ? 87 : 13, tope(ty + rnd(-20, 20), 10, 90), 320); }
       else if (l.tipo === 'palo') { anunciar('<b>¡PALO!</b>', 'palo'); reanimar(estadio, 'sacude'); await pelotaA(eqT === 0 ? 85 : 15, rnd(30, 70), 380); }
@@ -333,6 +367,9 @@
     if (l.tipo === 'perdida') return jugadaPerdida(l);
     escribir(l);
     if (saltando) return;
+    if (['falta', 'amarilla', 'roja', 'penal'].includes(l.tipo)) S.silbato(1, l.tipo === 'penal' ? 0.5 : 0.28);
+    if (l.tipo === 'roja') S.abucheo();
+    if (l.tipo === 'descanso') { S.silbato(2); S.ambiente(false); sonando = false; }
     if (l.tipo === 'penal') { anunciar('<b>¡PENAL!</b>', 'penal', 1500); return prepararPenal(l); }
     if (l.tipo === 'amarilla') anunciar(`<i class="tarjeta-ico amarilla"></i><span>${esc(l.jugador)}</span>`, 'tarjeta-a', 1400);
     else if (l.tipo === 'roja') { anunciar(`<i class="tarjeta-ico roja"></i><b>¡Roja!</b><span>${esc(l.jugador)}</span>`, 'tarjeta-r', 1900); reanimar(estadio, 'sacude'); }
@@ -345,9 +382,12 @@
   }
 
   // un minuto de partido: rápido si no pasa nada, en cámara lenta si se viene una jugada
+  let sonando = false;
   async function animarMinuto(eq, ls) {
     if (saltando) { for (const l of ls) { plantel(l); escribir(l); } return; }
-    const peligro = ls.some(l => TIROS.includes(l.tipo) || ['momento', 'penal', 'perdida'].includes(l.tipo));
+    if (!sonando) { sonando = true; S.silbato(1, 0.45); }   // pitazo inicial (y al volver del descanso)
+    S.ambiente(true);
+    const peligro = ls.some(l => TIROS.includes(l.tipo) || ['momento', 'penal', 'perdida', 'peligro', 'quite', 'corner', 'tiro_libre', 'despeje', 'pulso'].includes(l.tipo));
     if (!ls.length) {
       formar(eq, 1, 420);
       await pasar(elegir(eq, ['DEF', 'MED']), 340);
@@ -412,6 +452,7 @@
              && !['final', 'resumen'].includes(lineas[iLinea].tipo)) ls.push(lineas[iLinea++]);
       iMin++;
       ahora = [t, m];
+      if (VIVO && vivo.rival_desde != null && absoluto(t, m) - vivo.rival_desde <= D.minutos_lectura) pintarControles();
       const rapido = !saltando && k <= reanudar;
       if (rapido) saltando = true;
       cuenta[eq]++;
@@ -453,15 +494,28 @@
     if (!VIVO || !$('tacticas')) return;
     const abierto = !$('modal').hidden;
     const bloqueado = abierto || terminado || iMin === 0 || (final && iMin >= posesion.length);
-    $('tacticas').hidden = false;
+    $('tacticas').hidden = terminado;
     const espera = esperaTactica();
     const pendiente = pedidos.find(p => p.tipo === 'tactica');
-    $('t-chips').innerHTML = Object.entries(D.tacticas).map(([k, t]) =>
-      `<button class="t-chip${vivo.tactica === k ? ' activo' : ''}${pendiente && pendiente.valor === k ? ' pendiente' : ''}" data-t="${k}"
-        title="${esc(t.ayuda)}" ${bloqueado || espera || vivo.tactica === k ? 'disabled' : ''}><span>${t.ico}</span>${esc(t.nombre)}</button>`).join('');
+    // contras: cada táctica le gana a una (ciclo presión > centros > cuidar > contragolpe > presión)
+    const pierdeCon = k => Object.keys(D.vence).find(x => D.vence[x] === k);
+    $('t-chips').innerHTML = Object.entries(D.tacticas).map(([k, t]) => {
+      const vence = D.vence[k] && D.tacticas[D.vence[k]], pierde = pierdeCon(k) && D.tacticas[pierdeCon(k)];
+      const ayuda = t.ayuda + (vence ? `\nLe gana a ${vence.nombre} · pierde con ${pierde.nombre}.` : '\nNeutra: no le gana ni pierde con nadie.');
+      return `<button class="t-chip${vivo.tactica === k ? ' activo' : ''}${pendiente && pendiente.valor === k ? ' pendiente' : ''}" data-t="${k}"
+        title="${esc(ayuda)}" ${bloqueado || espera || vivo.tactica === k ? 'disabled' : ''}><span>${t.ico}</span>${esc(t.nombre)}${vence ? `<small class="t-vence">› ${vence.ico}</small>` : ''}</button>`;
+    }).join('');
     $('t-espera').textContent = espera ? `· podrás cambiarla en ${espera}'` : '';
     const rival = D.tacticas[vivo.tactica_rival];
-    $('t-rival').textContent = rival && vivo.tactica_rival !== 'normal' ? `Rival: ${rival.ico} ${rival.nombre}` : '';
+    const leyendo = vivo.rival_desde != null && absoluto(...ahora) - vivo.rival_desde < D.minutos_lectura;
+    const tRival = $('t-rival');
+    tRival.classList.toggle('leyendo', leyendo);
+    tRival.classList.toggle('contra', !leyendo && D.vence[vivo.tactica] === vivo.tactica_rival);
+    tRival.classList.toggle('contrado', !leyendo && D.vence[vivo.tactica_rival] === vivo.tactica);
+    tRival.textContent = leyendo ? 'Rival: 🔎 cambió algo… leyéndolo'
+      : rival && vivo.tactica_rival !== 'normal'
+        ? `Rival: ${rival.ico} ${rival.nombre}${D.vence[vivo.tactica] === vivo.tactica_rival ? ' · ¡le ganas!' : D.vence[vivo.tactica_rival] === vivo.tactica ? ' · te está ganando' : ''}`
+        : '';
     const b = $('btn-pausa');
     b.hidden = false;
     const sinCambios = vivo.cambios_restantes <= 0, pidiendo = pedidos.some(p => p.tipo === 'pausa');
@@ -514,35 +568,117 @@
     if (p.tipo === 'roja') pausaRoja(p);
     else if (p.tipo === 'ocasion') pausaOcasion(p);
     else if (p.tipo === 'penal') pausaPenal(p);
+    else if (p.tipo === 'defensa') pausaDefensa(p);
+    else if (p.tipo === 'corner' || p.tipo === 'tiro_libre') pausaParada(p);
     else pausaCambios(p);
     pintarControles();
   }
 
-  // --- momento clave: tú eliges la jugada
+  const espera = ms => new Promise(r => setTimeout(r, ms));   // pausas reales (no dependen de la velocidad)
+  const {barraTiempo, pulso} = window.FGM_PULSO;
+  // tarjetas de opción (sin porcentajes): el atributo de tu jugador y si ya te la conocen
+  function opcionesMomento(p, iconos) {
+    return `
+      ${p.pista ? `<p class="m-pista">🔎 ${esc(p.pista)}</p>` : ''}
+      <div class="m-opciones">${p.opciones.map((o, i) => `
+        <button class="m-op${o.leida ? ' leida' : ''}" data-c="${o.clave}" style="animation-delay:${i * 90}ms">
+          <span class="m-ico">${o.ico || iconos[o.clave] || '⚽'}</span>
+          <b>${esc(o.titulo)} <small class="m-stat">${esc(o.stat[0])} ${o.stat[1]}</small></b><small>${esc(o.detalle)}</small>
+          ${o.riesgo ? `<em class="tenue">${esc(o.riesgo)}</em>` : ''}
+          ${o.leida ? '<em class="m-leida">👀 Ya la usaste: te la pueden estar esperando</em>' : ''}
+        </button>`).join('')}</div>
+      <div class="m-ejecucion"></div>`;
+  }
+  const NOMBRE_JUGADA = {tirar: '🥅 Rematar', pasar: '🤝 Pasarla', gambetear: '🪄 Encarar', barrer: '🦵 Ir al piso',
+    achicar: '🧤 Salir a achicar', cerrar: '🧱 Cerrar el ángulo', izq: '↖ Izquierda', centro: '⬆ Al medio', der: '↗ Derecha'};
+
+  // elegir (a ciegas) → se revela lo del rival → pulso → decisión
+  async function jugarMomento(p, seleccion, alTiempo, armarDecision) {
+    let elegida = null;
+    const fin = eleccion => elegir(eleccion, true);
+    temporizador(p.segundos || 12, () => { if (!elegida) fin(alTiempo); });
+    caja.querySelectorAll(seleccion).forEach(b => b.onclick = () => elegir(b.dataset.c || b.dataset.l));
+    async function elegir(eleccion, porTiempo = false) {
+      if (elegida) return;
+      elegida = eleccion;
+      clearInterval(cronometro);
+      caja.querySelector('.crono')?.remove();
+      caja.querySelectorAll(seleccion).forEach(x => x.classList.toggle('elegida', (x.dataset.c || x.dataset.l) === eleccion));
+      let prep;
+      try { prep = await api('/api/partido/elegir', {eleccion}); }
+      catch (e) { FGM.toast(e.message, {error: true}); decidir(armarDecision(eleccion, [])); return; }
+      const cont = caja.querySelector('.m-ejecucion');
+      // la que quedó fija en el servidor (si recargaste la página, vale la primera que elegiste)
+      const fija = prep.clase === 'penal' ? (prep.rol === 'ataque' ? prep.lado : prep.adivina) : (prep.rol === 'ataque' ? prep.ataque : prep.defensa);
+      if (fija && fija !== eleccion) {
+        eleccion = fija;
+        caja.querySelectorAll(seleccion).forEach(x => x.classList.toggle('elegida', (x.dataset.c || x.dataset.l) === eleccion));
+      }
+      const mia = prep.rol === 'ataque' ? prep.nombre_ataque : prep.nombre_defensa;
+      const suya = prep.rol === 'ataque' ? prep.nombre_defensa : prep.nombre_ataque;
+      caja.classList.add('revelado');
+      cont.innerHTML = `<p class="m-revela">${porTiempo ? '⏱️ Se acabó el tiempo. ' : ''}Tú: <b>${esc(mia || NOMBRE_JUGADA[eleccion] || eleccion)}</b> · Rival: <b>${esc(suya || '')}</b></p><div class="m-pulso"></div>`;
+      if (prep.pulso === false) {   // penal al otro lado: no hay nada que pulsear
+        cont.insertAdjacentHTML('beforeend', `<p class="pu-fin ${prep.rol === 'ataque' ? 'ok' : 'mal'}">${prep.rol === 'ataque' ? '¡Lo mandaste al otro lado!' : 'Te tiraste al otro lado…'}</p>`);
+        await espera(1100);
+        decidir(armarDecision(eleccion, []));
+        return;
+      }
+      await espera(700);
+      const toques = await pulso(cont.querySelector('.m-pulso'), prep, async r => { await espera(250); return prep.toques_rival[r]; });
+      decidir(armarDecision(eleccion, toques));
+    }
+  }
+
+  // --- momento clave de ataque
   const ICONO = {tirar: '🥅', pasar: '🤝', gambetear: '🪄'};
   function pausaOcasion(p) {
     caja.classList.add('momento');
     caja.innerHTML = `
       <h2>🎯 ¡Momento clave! <small class="tenue">${p.minuto}'</small></h2>
       <div class="mo-cab">${p.tirador ? carta(p.tirador) : ''}
-        <p><b>${esc(p.jugador)}</b> queda de frente al arco${p.arquero ? ` de <b>${esc(p.arquero)}</b>` : ''}. ¿Qué hace?</p></div>
-      <div class="m-opciones">${p.opciones.map((o, i) => `
-        <button class="m-op" data-c="${o.clave}" style="animation-delay:${i * 90}ms">
-          <span class="m-ico">${ICONO[o.clave] || '⚽'}</span>
-          <b>${esc(o.titulo)}</b><small>${esc(o.detalle)}</small>
-          <div class="m-prob"><i style="width:${Math.min(100, o.prob * 2)}%"></i></div>
-          <em>${o.prob}% de gol${o.exito != null ? ` · ${o.exito}% de que salga` : ''}</em>
-        </button>`).join('')}</div>
-      <p class="tenue m-pie">Si se acaba el tiempo, remata.</p>`;
-    caja.querySelectorAll('.m-op').forEach(b => b.onclick = () => decidir({eleccion: b.dataset.c}));
-    temporizador(p.segundos || 8, () => decidir({eleccion: 'tirar'}));
+        <p><b>${esc(p.jugador)}</b> queda de frente al arco${p.arquero ? ` de <b>${esc(p.arquero)}</b>` : ''}. ¿Qué hace? El rival también elige cómo defender.</p></div>
+      ${opcionesMomento(p, ICONO)}
+      <p class="tenue m-pie">Después se define en un pulso de ${3} toques. Si se acaba el tiempo, remata.</p>`;
+    jugarMomento(p, '.m-op', 'tirar', (eleccion, precisiones) => ({eleccion, precisiones}));
   }
 
-  // --- penal: eliges el lado (pateando o atajando)
+  // --- momento defensivo
+  const ICONO_DEF = {barrer: '🦵', achicar: '🧤', cerrar: '🧱'};
+  function pausaDefensa(p) {
+    caja.classList.add('momento', 'defensa-caja');
+    S.abucheo();
+    caja.innerHTML = `
+      <h2>🚨 ¡Te atacan! <small class="tenue">${p.minuto}'</small></h2>
+      <div class="mo-cab">${p.tirador ? carta(p.tirador) : ''}
+        <p><b>${esc(p.jugador)}</b> se escapa hacia tu arco. ¿Cómo lo frenas? No sabes qué va a intentar.</p></div>
+      ${opcionesMomento(p, ICONO_DEF)}
+      <p class="tenue m-pie">Después se define en un pulso. Si se acaba el tiempo, cierras el ángulo.</p>`;
+    jugarMomento(p, '.m-op', 'cerrar', (eleccion, precisiones) => ({eleccion, precisiones}));
+  }
+
+  // --- pelota parada (córner o tiro libre), a favor o en contra
+  function pausaParada(p) {
+    const ataco = p.rol === 'ataque', corner = p.tipo === 'corner';
+    caja.classList.add('momento');
+    if (!ataco) caja.classList.add('defensa-caja');
+    const titulo = corner ? (ataco ? '🚩 ¡Córner a favor!' : '🚩 Córner en contra') : (ataco ? '🎯 ¡Tiro libre a favor!' : '🎯 Tiro libre en contra');
+    const sub = ataco ? `<b>${esc(p.jugador)}</b> va a la pelota${p.receptor ? `; ${esc(p.receptor)} espera en el área` : ''}. ¿Qué jugada hacen? El rival también elige cómo defender.`
+      : `<b>${esc(p.jugador)}</b> va a la pelota. ¿Cómo defiendes? No sabes qué van a intentar.`;
+    caja.innerHTML = `
+      <h2>${titulo} <small class="tenue">${p.minuto}'</small></h2>
+      <div class="mo-cab">${p.tirador ? carta(p.tirador) : ''}<p>${sub}</p></div>
+      ${opcionesMomento(p, {})}
+      <p class="tenue m-pie">Después se define en un pulso. Si se acaba el tiempo, se elige lo más simple.</p>`;
+    jugarMomento(p, '.m-op', ataco ? p.opciones[0].clave : p.opciones[p.opciones.length - 1].clave,
+      (eleccion, precisiones) => ({eleccion, precisiones}));
+  }
+
+  // --- penal: lado a ciegas; si el arquero adivina, pulso
   function pausaPenal(p) {
     caja.classList.add('momento', 'penal-caja');
     const titulo = p.patea ? `¡Penal a favor! Patea ${esc(p.pateador)}` : `¡Penal en contra! Ataja ${esc(p.arquero)}`;
-    const sub = p.patea ? 'Elige dónde patear. El arquero va a intentar adivinar.' : `Patea ${esc(p.pateador)}. Elige hacia dónde se lanza tu arquero.`;
+    const sub = p.patea ? 'Elige dónde patear. Si el arquero adivina, se define en un pulso.' : `Patea ${esc(p.pateador)}. Elige hacia dónde te tiras: si adivinas, se define en un pulso.`;
     caja.innerHTML = `
       <h2>🥅 ${titulo}</h2><p class="tenue">${sub} <small>(visto desde quien patea)</small></p>
       <div class="arco-penal">
@@ -550,9 +686,9 @@
         <button data-l="centro"><span>⬆</span>Al medio</button>
         <button data-l="der"><span>↗</span>Derecha</button>
       </div>
-      <p class="tenue m-pie">${p.patea ? 'Al medio nunca se va afuera, pero si el arquero se queda, lo ataja.' : 'Los pateadores van más a los costados que al medio.'}</p>`;
-    caja.querySelectorAll('[data-l]').forEach(b => b.onclick = () => decidir({lado: b.dataset.l}));
-    temporizador(p.segundos || 7, () => decidir({}));
+      <div class="m-ejecucion"></div>
+      <p class="tenue m-pie">${p.patea ? 'Al medio: si el arquero se tira, es gol; si se queda, el pulso parte muy en contra.' : 'Los pateadores van más a los costados que al medio.'}</p>`;
+    jugarMomento(p, '[data-l]', p.patea ? 'izq' : 'centro', (lado, precisiones) => ({lado, precisiones}));
   }
 
   // --- cancha de la pausa: tus jugadores en su lugar, con su estado
@@ -615,7 +751,7 @@
         <div class="p-der">
           <div class="opciones">${ops.map((o, i) => `
             <button class="opcion" data-i="${i}" style="animation-delay:${i * 120}ms">
-              ${carta({nombre: o.entra_nombre, pos: o.entra_pos, ovr: o.entra_ovr, nivel: o.entra_nivel, club: o.entra_club}, {puesto: o.puesto})}
+              ${carta({nombre: o.entra_nombre, pos: o.entra_pos, ovr: o.entra_ovr, nivel: o.entra_nivel, club: o.entra_club, render: o.entra_render}, {puesto: o.puesto})}
               <span><b>Entra ${esc(o.entra_nombre)}</b> de ${esc(FGM.pos(o.puesto))} (${o.afinidad}%)<br><small class="tenue">Sale ${esc(o.sale_nombre)} (${esc(FGM.pos(o.sale_puesto))})</small></span>
             </button>`).join('')}
             <button class="opcion sin" data-i="-1"><span><b>Seguir con 10</b><br><small class="tenue">Sin cambios</small></span></button>
@@ -721,6 +857,7 @@
   async function finPartido() {
     if (terminado) return;
     terminado = true;
+    S.silbato(3); S.ambiente(false);
     pintarControles();
     $('g0').textContent = goles[0]; $('g1').textContent = goles[1];
     $('saltar').hidden = true;
@@ -735,6 +872,7 @@
     const html = await (await fetch(`/partido/${D.id}/resumen`)).text();
     const post = $('post'); post.innerHTML = html; post.hidden = false;
     reanimar(post, 'entra');
+    if ($('tacticas')) $('tacticas').hidden = true;   // ya no hay nada que cambiar
   }
 
   // ---------- controles

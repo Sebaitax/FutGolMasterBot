@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta">
+  <div class="bet-cab">
+    <h2>🎲 Apuestas</h2>
+    <small class="tenue" id="bet-actualizado"></small>
+  </div>
+  <p class="tenue bet-ayuda">Partidos <b>reales</b> de las ligas del juego. Elige quién gana: la cuota queda fija cuando apuestas.
+    Se cierra al empezar el partido y se paga sola al terminar (si se suspende, te devolvemos lo apostado).</p>
+  <div class="bet-ligas" id="bet-ligas"></div>
+  <div class="filtros bet-tabs" id="bet-tabs">
+    <button data-tab="partidos" class="activo">⚽ Partidos</button>
+    <button data-tab="mias">🧾 Mis apuestas</button>
+    <button data-tab="ranking">🏆 Ranking</button>
+  </div>
+  <div id="tab-partidos"></div>
+  <div id="tab-mias" hidden></div>
+  <div id="tab-ranking" hidden></div>
+</section>
+
+<div class="modal" id="bet-modal" hidden>
+  <div class="modal-caja bet-boleto" id="bet-boleto"></div>
+</div>
+
+<script id="datos" type="application/json">{{ datos|safe }}</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('datos').textContent);
+  const {esc, api, toast} = FGM;
+  const $ = id => document.getElementById(id);
+  const miles = n => Math.round(n).toLocaleString('es-CL');
+  const dia = ts => new Date(ts * 1000).toLocaleDateString('es-CL', {weekday: 'long', day: 'numeric', month: 'numeric'});
+  const hora = ts => new Date(ts * 1000).toLocaleTimeString('es-CL', {hour: '2-digit', minute: '2-digit'});
+  const QUE = {'1': 'Local', 'X': 'Empate', '2': 'Visita'};
+  let mias = D.mias;
+
+  if (D.actualizado) $('bet-actualizado').textContent = `Actualizado ${hora(D.actualizado)}`;
+  $('bet-ligas').innerHTML = D.ligas.map(l => `<a class="bet-liga${l.clave === D.liga ? ' activo' : ''}" href="?liga=${l.clave}">
+    <span>${l.bandera}</span>${esc(l.nombre)}<small>${l.partidos}</small></a>`).join('');
+  document.querySelector('.bet-liga.activo')?.scrollIntoView({inline: 'center', block: 'nearest'});
+
+  // ---------- pestañas
+  $('bet-tabs').onclick = e => {
+    const b = e.target.closest('[data-tab]'); if (!b) return;
+    document.querySelectorAll('#bet-tabs button').forEach(x => x.classList.toggle('activo', x === b));
+    for (const t of ['partidos', 'mias', 'ranking']) $('tab-' + t).hidden = t !== b.dataset.tab;
+  };
+
+  // ---------- partidos de la liga
+  const escudo = (url, nombre) => `<img class="bet-esc" src="${esc(url)}" alt="" title="${esc(nombre)}" loading="lazy" onerror="this.style.visibility='hidden'">`;
+  function pintarPartidos() {
+    const abiertas = new Map(mias.filter(a => a.estado === 'abierta').map(a => [a.partido, a]));
+    let html = '', ultimoDia = '';
+    if (!D.proximos.length) html = '<p class="tenue">No hay partidos de esta liga en los próximos días. Prueba otra liga.</p>';
+    for (const p of D.proximos) {
+      const d = dia(p.ts);
+      if (d !== ultimoDia) { html += `<h3 class="bet-dia">${esc(d)}</h3>`; ultimoDia = d; }
+      const ya = abiertas.get(p.id);
+      html += `<div class="bet-partido${ya ? ' apostado' : ''}">
+        <div class="bet-info"><span>${hora(p.ts)}</span><small>${esc(p.ronda || '')}</small>${ya ? `<em>🎟️ Apostaste ${miles(ya.monto)} a ${QUE[ya.eleccion].toLowerCase()}</em>` : ''}</div>
+        <div class="bet-equipos">
+          <span class="bet-eq">${escudo(p.escudos[0], p.local)}<b>${esc(p.local)}</b></span>
+          <i>vs</i>
+          <span class="bet-eq visita"><b>${esc(p.visita)}</b>${escudo(p.escudos[1], p.visita)}</span>
+        </div>
+        <div class="bet-cuotas">${['1', 'X', '2'].map(k => `<button data-p="${p.id}" data-e="${k}">
+          <small>${k === '1' ? esc(p.local) : k === '2' ? esc(p.visita) : 'Empate'}</small><b>${p.cuotas[k].toFixed(2)}</b></button>`).join('')}</div>
+      </div>`;
+    }
+    if (D.recientes.length) {
+      html += `<h3 class="bet-dia">Resultados recientes</h3><div class="bet-recientes">` + D.recientes.map(p => `<div>
+        <span class="bet-estado ${p.grupo === 3 ? 'envivo' : ''}">${p.grupo === 3 ? '🔴 ' + esc(p.texto) : esc(dia(p.ts).split(',')[1] || '')}</span>
+        <span class="bet-r-eq">${escudo(p.escudos[0], p.local)}${esc(p.local)}</span>
+        <b>${p.goles[0] ?? '-'} - ${p.goles[1] ?? '-'}</b>
+        <span class="bet-r-eq visita">${esc(p.visita)}${escudo(p.escudos[1], p.visita)}</span></div>`).join('') + '</div>';
+    }
+    $('tab-partidos').innerHTML = html;
+  }
+  $('tab-partidos').onclick = e => {
+    const b = e.target.closest('[data-p]'); if (!b) return;
+    boleto(D.proximos.find(p => p.id === +b.dataset.p), b.dataset.e);
+  };
+
+  // ---------- boleto
+  function boleto(p, e) {
+    const saldo = () => +$('monedas').dataset.valor || 0;
+    const cuota = p.cuotas[e];
+    const caja = $('bet-boleto');
+    caja.innerHTML = `<button class="cerrar enlace" id="bet-x" aria-label="Cerrar">✕</button>
+      <h2>🎟️ Tu apuesta</h2>
+      <p class="tenue">${esc(p.local)} vs ${esc(p.visita)} · ${esc(dia(p.ts))} ${hora(p.ts)}</p>
+      <p class="bet-eleccion">${e === 'X' ? 'Empate' : 'Gana ' + esc(e === '1' ? p.local : p.visita)} <b>× ${cuota.toFixed(2)}</b></p>
+      <label class="bet-monto">Monto <input id="bet-monto" type="number" inputmode="numeric" min="${D.minima}" step="100" value="${Math.min(10000, saldo())}"></label>
+      <div class="filtros bet-rapidos">${[1000, 10000, 50000, 100000].map(n => `<button data-m="${n}">${miles(n)}</button>`).join('')}<button data-m="todo">Todo</button></div>
+      <p class="bet-premio">Si aciertas cobras <b id="bet-premio"></b></p>
+      <button class="primario grande-btn" id="bet-ok">Apostar</button>`;
+    const input = $('bet-monto');
+    const pintar = () => { $('bet-premio').textContent = '🪙 ' + miles((+input.value || 0) * cuota); };
+    input.oninput = pintar; pintar();
+    caja.querySelector('.bet-rapidos').onclick = ev => {
+      const b = ev.target.closest('[data-m]'); if (!b) return;
+      input.value = b.dataset.m === 'todo' ? saldo() : Math.min(+b.dataset.m, saldo()); pintar();
+    };
+    const cerrar = () => { $('bet-modal').hidden = true; };
+    $('bet-x').onclick = cerrar;
+    $('bet-modal').onclick = ev => { if (ev.target.id === 'bet-modal') cerrar(); };
+    $('bet-ok').onclick = async () => {
+      const monto = Math.floor(+input.value || 0);
+      if (monto < D.minima) { toast(`La apuesta mínima es ${miles(D.minima)}.`, {error: true}); return; }
+      if (monto > saldo()) { toast('No te alcanzan las monedas.', {error: true}); return; }
+      $('bet-ok').disabled = true;
+      try {
+        const r = await api('/api/apuestas', {partido: p.id, eleccion: e, monto});
+        FGM.monedas(r.monedas); mias = r.mias;
+        cerrar(); pintarPartidos(); pintarMias();
+        toast(`🎟️ Apostaste ${miles(monto)} · si aciertas cobras ${miles(r.premio)}`);
+      } catch (er) { toast(er.message, {error: true}); $('bet-ok').disabled = false; }
+    };
+    $('bet-modal').hidden = false;
+    input.focus(); input.select();
+  }
+
+  // ---------- mis apuestas
+  function pintarMias() {
+    const abiertas = mias.filter(a => a.estado === 'abierta').length;
+    document.querySelector('[data-tab=mias]').textContent = `🧾 Mis apuestas${abiertas ? ` (${abiertas})` : ''}`;
+    const ESTADO = {abierta: ['⏳', 'En juego'], ganada: ['✅', 'Ganada'], perdida: ['❌', 'Perdida'], devuelta: ['↩️', 'Devuelta']};
+    $('tab-mias').innerHTML = mias.length ? mias.map(a => {
+      const [ico, txt] = ESTADO[a.estado];
+      const que = a.eleccion === 'X' ? 'Empate' : 'Gana ' + (a.eleccion === '1' ? a.local : a.visita);
+      const res = a.estado === 'ganada' ? `+${miles(a.pago - a.monto)}` : a.estado === 'perdida' ? `-${miles(a.monto)}`
+        : a.estado === 'devuelta' ? '±0' : `cobras ${miles(a.monto * a.cuota)}`;
+      return `<div class="bet-mia ${a.estado}"><span class="bet-mia-ico">${ico}</span>
+        <div><b>${esc(a.local)} vs ${esc(a.visita)}</b>${a.marcador ? ` <span class="tenue">${esc(a.marcador)}</span>` : ''}
+        <small>${esc(que)} × ${a.cuota.toFixed(2)} · apostaste ${miles(a.monto)} · ${esc(txt)}${a.estado === 'abierta' ? ' · ' + esc(dia(a.inicio)) + ' ' + hora(a.inicio) : ''}</small></div>
+        <strong>${res}</strong></div>`;
+    }).join('') : '<p class="tenue">Todavía no apuestas. Elige un partido en la pestaña Partidos.</p>';
+  }
+
+  // ---------- ranking
+  $('tab-ranking').innerHTML = D.ranking.length ? '<ol class="bet-ranking">' + D.ranking.map(r => `<li class="${r.yo ? 'yo' : ''}">
+      <b>${esc(r.club || '?')}</b><small>${r.ganadas}/${r.apuestas} ganadas</small>
+      <strong class="${r.neto >= 0 ? 'sube' : 'baja'}">${r.neto >= 0 ? '+' : ''}${miles(r.neto)}</strong></li>`).join('') + '</ol>'
+    : '<p class="tenue">El ranking aparece cuando se resuelvan las primeras apuestas.</p>';
+
+  pintarPartidos(); pintarMias();
+})();
+</script>
+{% endblock %}

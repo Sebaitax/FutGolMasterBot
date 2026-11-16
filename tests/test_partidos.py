@@ -130,31 +130,83 @@ class TestEnVivo(unittest.TestCase):
         self.assertEqual(sim.equipos[0].tactica, "cuidar")
 
     def test_momentos_clave_y_penales(self):
-        from partidos.motor import MAX_MOMENTOS
-        vistos = {"ocasion": 0, "penal": 0}
+        """Jugadas clave: eliges a ciegas, la máquina también, y se define en un pulso."""
+        from partidos.motor import MAX_MOMENTOS, Simulacion
+        vistos = {"ocasion": 0, "penal": 0, "defensa": 0, "corner": 0, "tiro_libre": 0}
+        pulsos = []
         for semilla in range(60):
             sim = self._sim(semilla)
 
             def decidir(p):
+                toques = [(semilla % 10) / 10] * 3
                 if p["tipo"] == "ocasion":
                     ops = sim.opciones_ocasion(p)["opciones"]
                     self.assertEqual([o["clave"] for o in ops], ["tirar", "pasar", "gambetear"])
-                    self.assertTrue(all(0 <= o["prob"] <= 100 for o in ops))
-                    return {"eleccion": ["tirar", "pasar", "gambetear"][semilla % 3]}
+                    self.assertTrue(all("prob" not in o for o in ops))   # sin probabilidades a la vista
+                    el = ["tirar", "pasar", "gambetear"][semilla % 3]
+                    prep = sim.preparar_duelo(p, el, sim.eleccion_ia(p, "defensa"))
+                    self.assertTrue(0.2 <= prep["inicio"] <= 0.8)
+                    # la máquina decide lo mismo aunque se le pregunte dos veces (no se puede tantear)
+                    self.assertEqual(sim.eleccion_ia(p, "defensa"), sim.eleccion_ia(p, "defensa"))
+                    return {"eleccion": el, "precisiones": toques}
+                if p["tipo"] == "defensa":
+                    ops = sim.opciones_defensa(p)["opciones"]
+                    self.assertEqual(ops[-1]["clave"], "cerrar")
+                    return {"eleccion": ["barrer", "achicar", "cerrar"][semilla % 3], "precisiones": toques}
                 if p["tipo"] == "penal":
-                    return {"lado": "izq"}
+                    return {"lado": "izq", "precisiones": toques}
+                if p["tipo"] in ("corner", "tiro_libre"):
+                    rol = "ataque" if p["ataca"] == 0 else "defensa"
+                    ops = sim.opciones_pausa(p, rol)["opciones"]
+                    self.assertEqual(len(ops), 3)
+                    self.assertTrue(all(o["gesto"] for o in ops))
+                    return {"eleccion": ops[semilla % 3]["clave"], "precisiones": toques}
                 return {}
             res, pausas = self._jugar(sim, decidir)
             tipos = [p["tipo"] for p in pausas]
-            self.assertLessEqual(tipos.count("ocasion"), MAX_MOMENTOS)
+            self.assertLessEqual(tipos.count("ocasion"), MAX_MOMENTOS + 2)   # +2 en el momento decisivo
             for k in vistos:
                 vistos[k] += tipos.count(k)
+            pulsos += [e for e in res.eventos if e.tipo == "pulso"]
             for e in res.eventos:
-                if e.datos.get("penal") and e.tipo in ("gol", "atajada", "desviado") and e.equipo == 0 and e.tipo != "atajada":
+                if e.datos.get("penal") and e.tipo in ("gol", "atajada", "desviado") and e.equipo == 0:
                     self.assertEqual(e.datos["lado"], "izq")  # el lado que elegiste
             self.assertFalse(sim._pendientes)  # no quedan jugadas sin resolver
         self.assertGreater(vistos["ocasion"], 30)
         self.assertGreater(vistos["penal"], 0)
+        self.assertGreater(vistos["defensa"], 20)
+        self.assertGreater(vistos["corner"], 5)
+        self.assertGreater(vistos["tiro_libre"], 5)
+        self.assertTrue(any(e.datos["gana"] for e in pulsos) and not all(e.datos["gana"] for e in pulsos))
+
+    def test_pulso(self):
+        from partidos.motor import Simulacion
+        # tocar mejor que el rival empuja la barra a tu favor
+        self.assertGreater(Simulacion.final_pulso(0.5, [1, 1, 1], [0, 0, 0]), 0.8)
+        self.assertLess(Simulacion.final_pulso(0.5, [0, 0, 0], [1, 1, 1]), 0.2)
+        self.assertAlmostEqual(Simulacion.final_pulso(0.6, [0.5] * 3, [0.5] * 3), 0.6)
+
+    def test_duelo_entre_amigos(self):
+        """En vivo entre amigos: los dos equipos deciden; hay jugadas clave para ambos lados."""
+        atacan = set()
+        for semilla in range(30):
+            sim = self._sim(semilla)
+            sim.duelos = True
+            gen = sim.correr(interactivo=None)
+            try:
+                pausa = next(gen)
+                while True:
+                    self.assertIn(pausa["tipo"], ("duelo", "penal"))
+                    atacan.add(pausa["ataca"])
+                    if pausa["tipo"] == "duelo":
+                        d = {"ataque": "gambetear", "defensa": "barrer", "prec_ataque": [0.9] * 3, "prec_defensa": [0.2] * 3}
+                    else:
+                        d = {"lado_pateador": "der", "lado_arquero": "der", "prec_ataque": [0.5] * 3, "prec_defensa": [0.5] * 3}
+                    pausa = gen.send(d)
+            except StopIteration:
+                pass
+            self.assertFalse(sim._pendientes)
+        self.assertEqual(atacan, {0, 1})
 
     def test_probabilidad_de_ganar_y_razones(self):
         for semilla in range(20):

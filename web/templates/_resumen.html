@@ -1,4 +1,15 @@
 {% set est = detalle.estadisticas %}
+{% if detalle.escalera %}{% set e = detalle.escalera %}
+<section class="tarjeta copas-resultado {{ e.resultado }}">
+  <div class="cr-copas"><b>{{ '%+d'|format(e.delta) }}</b><span>🏆</span></div>
+  <div>
+    <h3>{{ '¡Victoria!' if e.resultado == 'victoria' else 'Empate' if e.resultado == 'empate' else 'Derrota' }} · {{ e.copas }} copas</h3>
+    {% if e.sube %}<p class="cr-sube">🎉 ¡Subiste de cancha!</p>{% endif %}
+    <p class="tenue">🪙 +{{ e.monedas }} monedas{% if e.sobre %} · 📦 ganaste un sobre ({{ e.sobre }}){% elif e.sin_espacio %} · 📦 no ganaste sobre: tienes los 4 espacios llenos{% endif %}
+      {% if e.resultado == 'derrota' and e.delta == 0 %} · no bajas de esta cancha{% endif %}</p>
+  </div>
+</section>
+{% endif %}
 {% if detalle.razones %}
 {% set gl, gv = partido.goles_local, partido.goles_visita %}
 {% set gm, gr = (gl, gv) if detalle.lado == 0 else (gv, gl) %}
@@ -42,4 +53,5 @@
   {% endfor %}
 </section>
 {% endif %}
-<div class="fila"><a class="boton primario" href="/">Continuar</a><a class="boton" href="/tabla">Ver tabla</a></div>
+<!-- flota abajo de la pantalla: siempre a la vista sin bajar -->
+<div class="post-acciones">{% if detalle.escalera %}<form method="post" action="/escalera/jugar" style="display:contents"><button class="primario" name="modo" value="vivo">⚔️ Otro partido</button></form><a class="boton" href="/">🏠 Inicio</a>{% else %}<a class="boton primario" href="/">▶ Continuar</a><a class="boton" href="/tabla">📊 Ver tabla</a>{% endif %}</div>

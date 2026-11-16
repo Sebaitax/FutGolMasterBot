@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block contenido %}
+<section class="tarjeta amigo-cab">
+  <img class="escudo grande" src="/escudo/amigo/{{ amigo.pid }}" alt="">
+  <div>
+    <h2>{{ amigo.nombre }}</h2>
+    {% if amigo.eslogan %}<p class="tenue">“{{ amigo.eslogan }}”</p>{% endif %}
+    <p class="tenue">{{ amigo.division }} · 🏟️ {{ amigo.estadio }}</p>
+    <p>Media <b>{{ "%.1f"|format(amigo.fuerza) }}</b> · química <b>{{ amigo.quimica }}</b> · {{ amigo.formacion }} {{ amigo.mentalidad }}</p>
+    <p class="tenue">En liga: {{ amigo.record.g }}G {{ amigo.record.e }}E {{ amigo.record.p }}P
+      {% if entre_ustedes.g + entre_ustedes.e + entre_ustedes.p %} · Entre ustedes: {{ entre_ustedes.g }}G {{ entre_ustedes.e }}E {{ entre_ustedes.p }}P{% endif %}</p>
+  </div>
+  {% if not mio %}
+  <form method="post" action="/desafiar/{{ amigo.pid }}" class="amigo-accion">
+    <input type="hidden" name="de_local" value="1">
+    <button class="primario">⚔️ Desafiar a su plantilla</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="tarjeta">
+  <h3>Su once <small class="tenue">{{ amigo.formacion }}</small></h3>
+  <div class="cancha chica-cancha amigo-cancha" id="cancha-amigo">
+    <div class="lineas"><div class="medio"></div><div class="circulo"></div><div class="area arriba"></div><div class="area abajo"></div></div>
+  </div>
+  <h3>Banca</h3>
+  <div class="cartas-fila" id="banca-amigo"></div>
+  <h3>Resto del plantel <small class="tenue">({{ amigo.n_cartas }} cartas en total)</small></h3>
+  <div class="cartas-fila" id="resto-amigo"></div>
+</section>
+<p class="centrado"><a class="enlace" href="/amistosos">← Volver a amistosos</a></p>
+<script>
+(() => {
+  const once = {{ amigo.once|safe }}, coords = {{ amigo.coords|safe }};
+  const c = document.getElementById('cancha-amigo');
+  // la cancha chica tiene el arco propio arriba: se da vuelta el eje vertical
+  once.forEach((j, i) => {
+    const s = document.createElement('div');
+    s.className = 'slot'; s.style.left = coords[i][0] + '%'; s.style.top = coords[i][1] + '%';
+    s.style.animationDelay = (i * 50) + 'ms';
+    s.innerHTML = FGM.carta(j) + `<small class="s-puesto">${FGM.pos(j.puesto)}</small>`;
+    c.appendChild(s);
+  });
+  const fila = (id, lista) => document.getElementById(id).innerHTML =
+    lista.map(f => FGM.carta(f)).join('') || '<p class="tenue">—</p>';
+  fila('banca-amigo', {{ amigo.banca|safe }});
+  fila('resto-amigo', {{ amigo.resto|safe }});
+})();
+</script>
+{% endblock %}

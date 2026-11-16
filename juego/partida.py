@@ -25,6 +25,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from juego import economia
+from juego import escalera as ESC
+from juego import antitrampas
+
+# cartas que nunca se venden: ni venta rápida ni mercado de transferencias
+# cartas exclusivas: solo las entrega el admin (no salen en sobres ni en la carta gratis) y tampoco se venden
+EXCLUSIVAS = {"Mario Zúñiga"}
+INTRANSFERIBLES = {"Pablo Olivares"} | EXCLUSIVAS
 from juego.bd import RUTA_POR_DEFECTO, conectar
 from models.carta import STATS, Carta, nivel_por_ovr
 from juego.formaciones import factor_quimica, quimica
@@ -49,6 +56,7 @@ PLANTEL_INICIAL = {"POR": 2, "DEF": 6, "MED": 6, "DEL": 4}
 # El plantel inicial sale de la liga elegida, con OVR alrededor de la media del club más débil
 RANGO_INICIAL = (-6, 3)         # respecto de esa media
 SUPLENTES = 7
+AMIGO = 2   # equipos.es_usuario: 1 tu club, 0 bots, 2 club de un amigo copiado para un desafío
 AMARILLAS_SUSPENSION = 5
 PLANTEL_MINIMO = 16             # no se puede vender por debajo de esto
 DIAS_POR_FECHA = 7              # para convertir días de lesión en fechas
@@ -231,7 +239,7 @@ class Partida:
     # ------------------------------------------------------------ crear
 
     def crear(self, nombre_club: str, semilla: int | None = None, catalogo: str | Path | None = None,
-              divisiones: int = 3):
+              divisiones: int = 3, pais: str | None = None):
         """Crea la partida con los clubes de todos los catálogos (`catalogo`: CSV o patrón glob).
 
         Con 3 divisiones, los clubes se ordenan por fuerza y se reparten en Oro, Plata y
@@ -305,16 +313,30 @@ class Partida:
             (nombre_club, f"Estadio {nombre_club}", json.dumps(escudo_por_defecto(nombre_club)))).lastrowid
         self._set("usuario_id", uid)
 
-        # plantel inicial: alrededor de la fuerza del club más débil de tu división
-        rivales = [fuerzas[r["id"]] for r in self.con.execute(
-            "SELECT id FROM equipos WHERE division = 0 AND es_usuario = 0")]
-        media = round(min(rivales)) if rivales else 63
-        bajo, alto = media + RANGO_INICIAL[0], media + RANGO_INICIAL[1]
+        # escalera de copas: tu país define tu liga (plantel inicial, bots y sobres)
+        self._set("pais", pais if pais in ESC.PAISES else ESC.PAIS_DEFECTO)
+        self._set("copas", 0)
+        self._set("max_copas", 0)
+        self._set("sobres_tiempo", [])
+        self._set("ciclo_sobres", 0)
+        ovrs = self._ovrs_liga()
+        if ovrs:
+            # plantel inicial: los más modestos de tu liga (un poco mejor que los bots del barrio)
+            bajo, alto = ESC.cuantil(ovrs, 0.04), ESC.cuantil(ovrs, 0.20)
+            filtro, extra = "AND liga = ?", (self._liga_pais(),)
+        else:
+            # sin cartas de esa liga: alrededor de la fuerza del club más débil de tu división
+            rivales = [fuerzas[r["id"]] for r in self.con.execute(
+                "SELECT id FROM equipos WHERE division = 0 AND es_usuario = 0")]
+            media = round(min(rivales)) if rivales else 63
+            bajo, alto = media + RANGO_INICIAL[0], media + RANGO_INICIAL[1]
+            filtro, extra = "", ()
         for ln, cantidad in PLANTEL_INICIAL.items():
             for margen in range(0, 20, 2):  # si no alcanzan, se amplía el rango
                 candidatos = [r["id"] for r in self.con.execute(
-                    "SELECT id, posicion FROM cartas WHERE ovr BETWEEN ? AND ? ORDER BY id", (bajo - margen, alto + margen))
-                    if linea(r["posicion"]) == ln]
+                    f"SELECT id, posicion, nombre FROM cartas WHERE ovr BETWEEN ? AND ? {filtro} ORDER BY id",
+                    (bajo - margen, alto + margen, *extra))
+                    if linea(r["posicion"]) == ln and r["nombre"] not in EXCLUSIVAS]
                 if len(candidatos) >= cantidad:
                     break
             for carta_id in rng.sample(candidatos, min(cantidad, len(candidatos))):
@@ -371,7 +393,8 @@ class Partida:
         for f in filas:
             carta, nivel = _carta(f), f["nivel"] or 1
             base = carta.ovr
-            if nivel > 1:  # cada nivel de mejora: +1 a la media y a cada atributo
+            if nivel > 1:  # cada nivel de mejora: +1 a la media y a cada atributo (sin cambiar de color)
+                carta.ovr_original = base
                 carta.ovr += nivel - 1
                 carta.stats = {k: min(99, v + nivel - 1) for k, v in carta.stats.items()}
             salida.append(FichaJugador(f["pid"], f["carta_id"], carta, f["puesto"], f["lesion"], f["suspension"],
@@ -414,8 +437,9 @@ class Partida:
         self._guardar_en_activa()
         self.con.commit()
 
-    def _equipo_usuario(self) -> Equipo:
-        uid = self.usuario_id
+    def _equipo_usuario(self, uid: int | None = None) -> Equipo:
+        """Tu equipo con el once y los suplentes que elegiste (o el de un amigo copiado para un desafío)."""
+        uid = uid or self.usuario_id
         datos = self.equipo(uid)
         puestos = FORMACIONES[datos["formacion"]]
         fichas = self.plantel(uid)
@@ -446,13 +470,19 @@ class Partida:
         q = quimica(datos["formacion"], [j.carta for j in titulares])
         for j, valor in zip(titulares, q["jugadores"]):
             j.quimica = factor_quimica(valor)
+        socios: dict[str, list[str]] = {}
+        for a, b, v in q["enlaces"]:
+            if v == 2:
+                socios.setdefault(titulares[a].nombre, []).append(titulares[b].nombre)
+                socios.setdefault(titulares[b].nombre, []).append(titulares[a].nombre)
         # banca: los elegidos que quedan y, si faltan, se completa con los mejores
         banca = [j for j in libres if j.id in ids_elegidos][:SUPLENTES]
         if len(banca) < SUPLENTES:
             resto = [j for j in libres if j.id not in ids_elegidos]
             banca += self._banca(resto)[: SUPLENTES - len(banca)] if not any(j.carta.posicion == "GK" for j in banca) \
                 else sorted(resto, key=lambda j: -j.carta.ovr)[: SUPLENTES - len(banca)]
-        return Equipo(datos["nombre"], datos["formacion"], titulares, banca, datos["mentalidad"])
+        return Equipo(datos["nombre"], datos["formacion"], titulares, banca, datos["mentalidad"],
+                      quimica={"equipo": q["equipo"], "socios": socios})
 
     @staticmethod
     def _banca(libres: list[Jugador]) -> list[Jugador]:
@@ -475,14 +505,21 @@ class Partida:
         e.mentalidad = mentalidad
         return e
 
+    def _es_amigo(self, equipo_id: int) -> bool:
+        """Club de un amigo: copiado para un desafío o jugando en tu liga (usa su once, no el de un bot)."""
+        if any(v["equipo"] == equipo_id for v in self._get("liga_amigos", {}).values()):
+            return True
+        fila = self.con.execute("SELECT es_usuario FROM equipos WHERE id = ?", (equipo_id,)).fetchone()
+        return bool(fila) and fila["es_usuario"] == AMIGO
+
     def armar(self, equipo_id: int, fuerza_rival: float = 0) -> Equipo:
-        if equipo_id == self.usuario_id:
-            return self._equipo_usuario()
+        if equipo_id == self.usuario_id or self._es_amigo(equipo_id):
+            return self._equipo_usuario(equipo_id)
         return self._equipo_bot(equipo_id, fuerza_rival)
 
     def fuerza_equipo(self, equipo_id: int) -> float:
-        if equipo_id == self.usuario_id:
-            e = self._equipo_usuario()
+        if equipo_id == self.usuario_id or self._es_amigo(equipo_id):
+            e = self._equipo_usuario(equipo_id)
             return sum(j.carta.ovr * afinidad(j.carta.posicion, p)
                        for j, p in zip(e.titulares, FORMACIONES[e.formacion])) / 11
         jugadores = [f.jugador() for f in self.plantel(equipo_id) if f.disponible]
@@ -598,7 +635,8 @@ class Partida:
         self._continuar(ses, None, primero=True)
         for d in vivo["decisiones"]:
             self._continuar(ses, d)
-        _SESIONES.clear()
+        for vieja in [k for k in _SESIONES if k[0] == self.semilla]:  # solo las de esta partida
+            del _SESIONES[vieja]
         _SESIONES[clave] = ses
         return ses
 
@@ -621,6 +659,7 @@ class Partida:
         ses = self._sesion()
         if decision is not None and ses["pausa"] is not None:
             vivo = self.partido_en_vivo()
+            decision = self._revisar_pulso(decision, vivo)
             vivo["decisiones"].append(decision)
             vivo["ultima"] = list(ses["sim"].posesion_min[-1][:2]) if ses["sim"].posesion_min else [1, 0]
             self._set("vivo", vivo)
@@ -673,6 +712,56 @@ class Partida:
         desde = ses["sim"].indice_intervencion.get(clave, len(ses["sim"].eventos))
         return self._respuesta(ses, desde)
 
+    def elegir_jugada(self, eleccion: str) -> dict:
+        """Eliges tu jugada en la pausa clave (ataque, defensa o lado del penal): se revela lo que
+        eligió la máquina y se arma el pulso. La elección queda fija para esa jugada."""
+        ses = self._sesion()
+        pausa, sim, lado = ses["pausa"], ses["sim"], ses["lado"]
+        if not pausa or pausa["tipo"] not in ("ocasion", "defensa", "penal", "corner", "tiro_libre"):
+            raise ErrorJuego("No hay ninguna jugada que elegir.")
+        vivo = self.partido_en_vivo()
+        fija = vivo.get("eleccion")
+        if fija and fija["ref"] == pausa["ref"] and fija["n"] == len(vivo["decisiones"]):
+            eleccion = fija["eleccion"]   # ya elegiste: no se puede tantear otra
+        else:
+            vivo["eleccion"] = {"ref": pausa["ref"], "n": len(vivo["decisiones"]), "eleccion": eleccion,
+                                "desde": time.time()}   # empieza el pulso (para el control de tiempo)
+            self._set("vivo", vivo)
+            self.con.commit()
+        if pausa["tipo"] == "penal":
+            patea = pausa["ataca"] == lado
+            lp, la = (eleccion, sim.lado_ia(pausa, "arquero")) if patea else (sim.lado_ia(pausa, "pateador"), eleccion)
+            prep = sim.preparar_penal(pausa, lp, la)
+            rol = "ataque" if patea else "defensa"
+        else:
+            if pausa["ataca"] == lado:
+                prep, rol = sim.preparar_duelo(pausa, eleccion, sim.eleccion_ia(pausa, "defensa")), "ataque"
+            else:
+                prep, rol = sim.preparar_duelo(pausa, sim.eleccion_ia(pausa, "ataque"), eleccion), "defensa"
+        prep["rol"] = rol
+        if prep.get("pulso", True):
+            otro = "defensa" if rol == "ataque" else "ataque"
+            prep["toques_rival"] = sim.precisiones_ia(pausa, otro, prep["defensor" if otro == "defensa" else "atacante"]["valor"])
+        return prep
+
+    # la web la reemplaza para anotar las sospechas en la bitácora
+    al_sospechar = None
+
+    def _revisar_pulso(self, decision: dict, vivo: dict) -> dict:
+        """Controles del servidor sobre las precisiones que manda el navegador (ver juego/antitrampas.py)."""
+        if not isinstance(decision, dict) or "precisiones" not in decision:
+            return decision
+        fija = vivo.get("eleccion") or {}
+        segundos = time.time() - fija["desde"] if fija.get("desde") and fija.get("n") == len(vivo["decisiones"]) else None
+        precisiones, historial, motivo = antitrampas.revisar(decision.get("precisiones"), segundos,
+                                                             self._get("pulso_historial") or [])
+        self._set("pulso_historial", historial)
+        if motivo:
+            self._set("sospechas_pulso", (self._get("sospechas_pulso") or 0) + 1)
+            if self.al_sospechar:
+                self.al_sospechar(motivo)
+        return {**decision, "precisiones": precisiones}
+
     @staticmethod
     def _espera_tactica(inter: list[dict], clave: tuple[int, int]) -> int:
         """Minutos que faltan para poder cambiar otra vez la táctica (0 = ya se puede)."""
@@ -686,6 +775,8 @@ class Partida:
     def _respuesta(self, ses: dict, desde: int) -> dict:
         sim, lado = ses["sim"], ses["lado"]
         parcial = ses["resultado"] or sim.parcial()
+        # si el partido se rehízo (p. ej. el servidor se actualizó), el navegador puede venir de más adelante
+        desde = max(0, min(desde, len(sim.eventos)))
         lineas = Narrador(parcial, ses["semilla"] + desde).tramo(desde)
         pausa = None
         if ses["pausa"]:
@@ -695,8 +786,8 @@ class Partida:
                 pausa.setdefault("segundos", 60)
             if pausa["tipo"] == "roja":
                 pausa["opciones"] = sim.opciones_roja(lado, ses["pausa"])
-            if pausa["tipo"] == "ocasion":
-                pausa.update(sim.opciones_ocasion(ses["pausa"]))
+            if pausa["tipo"] in ("ocasion", "defensa", "corner", "tiro_libre"):
+                pausa.update(sim.opciones_pausa(ses["pausa"], "ataque" if pausa["ataca"] == lado else "defensa"))
         vivo = self.partido_en_vivo() or {}
         inter = vivo.get("intervenciones", [])
         marcas = [tuple(vivo["ultima"])] if vivo.get("ultima") else []
@@ -713,6 +804,7 @@ class Partida:
             "lado": lado,
             "tactica": sim.equipos[lado].tactica,
             "tactica_rival": sim.equipos[1 - lado].tactica,
+            "tactica_rival_leida": sim.tactica_leida(1 - lado),
             "pausas_restantes": PAUSAS_TACTICAS - sum(1 for i in inter if i["tipo"] == "pausa"),
             "cambios_restantes": MAX_CAMBIOS - sim.cambios[lado] if sim.banca[lado] else 0,
             "ultima_tactica": [tacticas[-1]["t"], tacticas[-1]["m"]] if tacticas else None,
@@ -743,10 +835,24 @@ class Partida:
 
     def _finalizar_en_vivo(self, ses: dict):
         res, p = ses["resultado"], ses["partido"]
+        if p["tipo"] == "escalera":
+            self._cerrar_escalera(p, res, ses["lado"], ses["semilla"], ses["local"], ses["visita"],
+                                  ses["sim"].posesion_min, (self.partido_en_vivo() or {}).get("escalera") or {})
+            self.con.execute("DELETE FROM estado WHERE clave = 'vivo'")
+            _SESIONES.pop((self.semilla, p["id"]), None)
+            self.con.commit()
+            return
         if p["tipo"] == "amistoso":  # no cuenta para nada: ni tabla, ni sanciones, ni fecha
             self.con.execute("UPDATE partidos SET goles_local = ?, goles_visita = ?, jugado = 1 WHERE id = ?",
                              (res.goles[0], res.goles[1], p["id"]))
             self._guardar_detalle(p["id"], res, ses["semilla"], ses["local"], ses["visita"], ses["sim"].posesion_min)
+            desafio = (self.partido_en_vivo() or {}).get("desafio")
+            if desafio and self.al_terminar_desafio:
+                lado = 0 if p["local_id"] == self.usuario_id else 1
+                goleadores = [[en.jugador.nombre for en in lista for _ in range(en.goles)] for lista in res.jugadores]
+                self.al_terminar_desafio(desafio, {
+                    "partido": p["id"], "de_local": lado == 0, "goles": res.goles[lado], "goles_rival": res.goles[1 - lado],
+                    "goleadores": goleadores[lado], "goleadores_rival": goleadores[1 - lado]})
             self.con.execute("DELETE FROM estado WHERE clave = 'vivo'")
             _SESIONES.pop((self.semilla, p["id"]), None)
             self.con.commit()
@@ -924,30 +1030,37 @@ class Partida:
         sobre = economia.SOBRES.get(clave)
         if not sobre:
             raise ErrorJuego("Ese sobre no existe.")
-        if self.monedas < sobre["precio"]:
+        precio = economia.precio_sobre(clave, self.cancha)
+        if self.monedas < precio:
             raise ErrorJuego("No te alcanzan las monedas.")
         self._asegurar_coleccionables()
         n_mov = self.con.execute("SELECT COUNT(*) FROM movimientos").fetchone()[0]
         rng = self._rng("sobre", n_mov)
-        self._mover_monedas(-sobre["precio"], sobre["nombre"])
-        niveles, pesos = zip(*sobre["probabilidades"].items())
-        # pueden salir cartas que ya tienes (sirven para mejorarlas), pero no dos iguales en el mismo sobre
-        excluir, nuevos, objetos = set(), [], []
-        for nivel in rng.choices(niveles, weights=pesos, k=sobre["cartas"]):
-            if rng.random() < sobre.get("objeto", 0):
-                obj = self._sortear_objeto(rng, nivel)
-                if obj:
-                    objetos.append(obj)
-                    continue
-            todas = [r["id"] for r in self.con.execute("SELECT id, ovr FROM cartas ORDER BY id") if nivel_por_ovr(r["ovr"]) == nivel]
-            ids = [i for i in todas if i not in excluir] or todas
-            elegida = rng.choice(ids)
-            excluir.add(elegida)
-            cur = self.con.execute("INSERT INTO plantilla (equipo_id, carta_id) VALUES (?, ?)", (self.usuario_id, elegida))
-            nuevos.append(cur.lastrowid)
+        self._mover_monedas(-precio, sobre["nombre"])
+        nuevos, objetos = self._llenar_sobre(rng, sobre, self.cancha)
         self.con.commit()
         self.ultimos_objetos = objetos
         return {"cartas": [f for f in self.plantel() if f.pid in nuevos], "objetos": objetos}
+
+    def _llenar_sobre(self, rng: random.Random, sobre: dict, cancha: int) -> tuple[list[int], list[dict]]:
+        """Cartas de tu liga (calidad según las probabilidades del sobre y tu cancha) y, a veces, un objeto.
+        Pueden salir cartas que ya tienes (sirven para mejorarlas), pero no dos iguales en el mismo sobre."""
+        excluir, nuevos, objetos = set(), [], []
+        for _ in range(sobre["cartas"]):
+            calidad = ESC.calidad_sobre(rng, sobre["probabilidades"])
+            if rng.random() < sobre.get("objeto", 0):
+                obj = self._sortear_objeto(rng, economia.RAREZA_OBJETO[calidad])
+                if obj:
+                    objetos.append(obj)
+                    continue
+            elegida = self._carta_por_cuantil(rng, ESC.cuantil_calidad(rng, cancha, calidad), excluir=excluir)
+            if elegida is None:   # sin cartas de tu liga: cualquiera
+                elegida = rng.choice([r["id"] for r in self.con.execute("SELECT id, nombre FROM cartas")
+                                      if r["nombre"] not in EXCLUSIVAS and r["id"] not in excluir])
+            excluir.add(elegida)
+            nuevos.append(self.con.execute("INSERT INTO plantilla (equipo_id, carta_id) VALUES (?, ?)",
+                                           (self.usuario_id, elegida)).lastrowid)
+        return nuevos, objetos
 
     # ------------------------------------------------------------ objetos de colección
 
@@ -977,6 +1090,50 @@ class Partida:
                         "INSERT INTO coleccionables (tipo, club, nombre, rareza, archivo, capacidad) VALUES ('estadio', ?, ?, ?, ?, ?)",
                         (e["club"], e["estadio"], economia.rareza_estadio(e.get("capacidad") or 0), e.get("archivo", ""),
                          e.get("capacidad") or 0))
+
+    def sincronizar_catalogo(self, catalogo: str | Path | None = None) -> int:
+        """Suma a una partida ya creada las cartas de ligas (o jugadores) agregadas después a data/.
+
+        Solo entran al catálogo (sobres y mercado); los clubes nuevos no se suman a las divisiones.
+        Revisa la fecha de los CSV para no releerlos en cada visita. Devuelve cuántas cartas sumó.
+        """
+        import glob
+        if not self.existe:
+            return 0
+        rutas = sorted(glob.glob(str(catalogo or CATALOGOS)))
+        firma = [[Path(r).name, int(Path(r).stat().st_mtime)] for r in rutas]
+        if self._get("catalogo_firma") == firma:
+            return 0
+        tengo = {(r["nombre"], r["club"]) for r in self.con.execute("SELECT nombre, club FROM cartas")}
+        clubes_antes = {r[0] for r in self.con.execute("SELECT DISTINCT club FROM cartas")}
+        nuevas = 0
+        for ruta in rutas:
+            with open(ruta, newline="", encoding="utf-8") as fh:
+                for f in csv.DictReader(fh):
+                    if (f["Nombre"], f["Club"]) in tengo:
+                        continue
+                    self.con.execute(
+                        "INSERT INTO cartas (nombre, alias, posicion, club, nacion, liga, ovr, pac, sho, pas, dri, def, phy, precio, edad)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (f["Nombre"], f.get("Alias", ""), f["Posición"], f["Club"], f.get("Nación", ""), f.get("Liga", ""),
+                         int(f["OVR"]), *(int(f[s]) for s in STATS), int(f.get("Precio") or 0), int(f.get("Edad") or 0)))
+                    tengo.add((f["Nombre"], f["Club"]))
+                    nuevas += 1
+        # escudos coleccionables de los clubes nuevos (rareza según su lugar entre todos los clubes)
+        if nuevas and self.con.execute("SELECT COUNT(*) FROM coleccionables").fetchone()[0]:
+            por_club: dict[str, list] = {}
+            for f in self.con.execute("SELECT * FROM cartas"):
+                por_club.setdefault(f["club"], []).append(Jugador(_carta(f)))
+            fuerzas = sorted(((fuerza(js), club) for club, js in por_club.items() if len(js) >= 11), reverse=True)
+            tercio = max(1, len(fuerzas) // 3)
+            for i, (_, club) in enumerate(fuerzas):
+                if club not in clubes_antes:
+                    rareza = "oro" if i < tercio else "plata" if i < 2 * tercio else "bronce"
+                    self.con.execute("INSERT INTO coleccionables (tipo, club, nombre, rareza, archivo, capacidad)"
+                                     " VALUES ('escudo', ?, ?, ?, '', 0)", (club, club, rareza))
+        self._set("catalogo_firma", firma)
+        self.con.commit()
+        return nuevas
 
     def _sortear_objeto(self, rng: random.Random, rareza: str) -> dict | None:
         """Un objeto que no tengas (primero de la rareza sorteada). None si ya tienes todos."""
@@ -1032,6 +1189,9 @@ class Partida:
         pids = list(dict.fromkeys(pids))
         if not pids or any(pid not in por_pid for pid in pids):
             raise ErrorJuego("Esa carta no está en tu plantel.")
+        fijo = next((por_pid[p].carta.nombre for p in pids if por_pid[p].carta.nombre in INTRANSFERIBLES), None)
+        if fijo:
+            raise ErrorJuego(f"{fijo} es intransferible: no se puede vender.")
         if len(fichas) - len(pids) < PLANTEL_MINIMO:
             raise ErrorJuego(f"Necesitas al menos {PLANTEL_MINIMO} jugadores en el plantel.")
         arqueros = sum(f.carta.posicion == "GK" for f in fichas) - sum(por_pid[p].carta.posicion == "GK" for p in pids)
@@ -1067,7 +1227,8 @@ class Partida:
     # ------------------------------------------------------------ mercado de transferencias
 
     def _momento(self) -> int:
-        return self.temporada * 100 + self.fecha
+        """El mercado se renueva cada 6 horas (con la escalera ya no hay fechas)."""
+        return int(time.time() // (6 * 3600))
 
     def _reponer_mercado(self):
         """Los clubes bot ponen jugadores en venta: en cada fecha vencen publicaciones y entran
@@ -1076,12 +1237,16 @@ class Partida:
         if self._get("mercado_momento") == ahora:
             return
         self.con.execute("DELETE FROM mercado WHERE expira < ?", (ahora,))
+        self.con.execute(f"DELETE FROM mercado WHERE carta_id IN (SELECT id FROM cartas WHERE nombre IN ({','.join('?' * len(INTRANSFERIBLES))}))",
+                         tuple(INTRANSFERIBLES))
         activas = {r[0] for r in self.con.execute("SELECT carta_id FROM mercado")}
         propios = {f.carta_id for f in self.plantel()}
         clubes = {e["nombre_real"] or e["nombre"]: e["id"] for e in self._bots()}  # los bots pueden tener otro nombre
         rng = self._rng("mercado", ahora)
+        fijas = self._ids_intransferibles()
         candidatas = [f for f in self.con.execute("SELECT id, club, precio FROM cartas ORDER BY id")
-                      if f["id"] not in activas and f["id"] not in propios and f["club"] in clubes]
+                      if f["id"] not in activas and f["id"] not in propios and f["club"] in clubes
+                      and f["id"] not in fijas]
         rng.shuffle(candidatas)
         for f in candidatas[: max(0, MERCADO_ACTIVAS - len(activas))]:
             factor = rng.uniform(0.7, 0.85) if rng.random() < 0.08 else rng.uniform(0.9, 1.35)  # a veces, una ganga
@@ -1091,6 +1256,10 @@ class Partida:
                              (f["id"], clubes[f["club"]], precio, ahora, ahora + duracion - 1))
         self._set("mercado_momento", ahora)
         self.con.commit()
+
+    def _ids_intransferibles(self) -> set[int]:
+        marcas = ",".join("?" * len(INTRANSFERIBLES))
+        return {r[0] for r in self.con.execute(f"SELECT id FROM cartas WHERE nombre IN ({marcas})", tuple(INTRANSFERIBLES))}
 
     def _publicacion(self, fila: sqlite3.Row, propios: set) -> dict:
         return {"publicacion_id": fila["mid"], "carta_id": fila["id"], "carta": _carta(fila), "precio": fila["mprecio"],
@@ -1210,11 +1379,12 @@ class Partida:
         if espera:
             raise ErrorJuego(f"La próxima carta gratis estará en {espera // 60} min.")
         rng = random.Random()
-        niveles, pesos = zip(*economia.CARTA_GRATIS_PROBABILIDADES.items())
-        nivel = rng.choices(niveles, weights=pesos)[0]
-        ids = [r["id"] for r in self.con.execute("SELECT id, ovr FROM cartas") if nivel_por_ovr(r["ovr"]) == nivel]
+        carta_id = self._carta_por_cuantil(rng, ESC.cuantil_sobre(rng, self.cancha, economia.CARTA_GRATIS_PROBABILIDADES))
+        if carta_id is None:   # sin cartas de tu liga: una de bronce de cualquier liga
+            carta_id = rng.choice([r["id"] for r in self.con.execute("SELECT id, ovr, nombre FROM cartas")
+                                   if nivel_por_ovr(r["ovr"]) == "bronce" and r["nombre"] not in EXCLUSIVAS])
         pid = self.con.execute("INSERT INTO plantilla (equipo_id, carta_id) VALUES (?, ?)",
-                               (self.usuario_id, rng.choice(ids))).lastrowid
+                               (self.usuario_id, carta_id)).lastrowid
         self._set("ultima_carta_gratis", time.time())
         self.con.commit()
         return next(f for f in self.plantel() if f.pid == pid)
@@ -1323,6 +1493,332 @@ class Partida:
             "INSERT INTO partidos (temporada, fecha, division, tipo, local_id, visita_id) VALUES (?, 0, -1, 'amistoso', ?, ?)",
             (self.temporada, local, visita)).lastrowid
         self._set("vivo", {"partido": pid, "decisiones": [], "intervenciones": []})
+        self.con.commit()
+        return pid
+
+    # ------------------------------------------------------------ escalera de copas
+
+    @property
+    def pais(self) -> str:
+        return self._get("pais") or ESC.PAIS_DEFECTO
+
+    @property
+    def copas(self) -> int:
+        return self._get("copas") or 0
+
+    @property
+    def max_copas(self) -> int:
+        return max(self._get("max_copas") or 0, self.copas)
+
+    @property
+    def cancha(self) -> int:
+        return ESC.cancha_de(self.copas)
+
+    def info_cancha(self, indice: int | None = None) -> dict:
+        return ESC.info_cancha(self.cancha if indice is None else indice, self.pais)
+
+    def _liga_pais(self) -> str:
+        return ESC.PAISES.get(self.pais, ESC.PAISES[ESC.PAIS_DEFECTO])[2]
+
+    def _ovrs_liga(self) -> list[int]:
+        return [r[0] for r in self.con.execute("SELECT ovr FROM cartas WHERE liga = ? ORDER BY ovr", (self._liga_pais(),))]
+
+    def _carta_por_cuantil(self, rng: random.Random, q: float, ln: str | None = None, excluir: set | None = None) -> int | None:
+        """Una carta de tu liga con media cerca del cuantil `q` (y de la línea `ln`, si se pide)."""
+        filas = [r for r in self.con.execute("SELECT id, ovr, posicion, nombre FROM cartas WHERE liga = ?", (self._liga_pais(),))
+                 if r["nombre"] not in EXCLUSIVAS and (ln is None or linea(r["posicion"]) == ln)
+                 and (not excluir or r["id"] not in excluir)]
+        if not filas:
+            return None
+        objetivo = ESC.cuantil(sorted(r["ovr"] for r in filas), q)
+        for margen in (1, 2, 3, 5, 8, 99):
+            cerca = [r["id"] for r in filas if abs(r["ovr"] - objetivo) <= margen]
+            if cerca:
+                return rng.choice(cerca)
+        return None
+
+    def _bot_escalera(self, cancha: int, rng: random.Random) -> int:
+        """Un bot de esa cancha (se reutilizan hasta 4 por cancha): jugadores de tu liga del nivel de la cancha."""
+        clave = -(100 + cancha)
+        existentes = [r["id"] for r in self.con.execute("SELECT id FROM equipos WHERE division = ?", (clave,))]
+        if len(existentes) >= 4 or (existentes and rng.random() < 0.6):
+            return rng.choice(existentes)
+        nombres = {r[0] for r in self.con.execute("SELECT nombre FROM equipos")}
+        ide = generar_bots(1, f"{self.semilla}-escalera-{cancha}-{len(existentes)}-{rng.random()}", nombres)[0]
+        eid = self.con.execute("INSERT INTO equipos (nombre, es_usuario, division, estadio, escudo) VALUES (?, 0, ?, ?, ?)",
+                               (ide["nombre"], clave, ide["estadio"], json.dumps(ide["escudo"]))).lastrowid
+        q = ESC.CANCHAS[cancha][2]
+        usadas: set[int] = set()
+        for ln, cantidad in PLANTEL_INICIAL.items():
+            for _ in range(cantidad):
+                carta_id = self._carta_por_cuantil(rng, q + rng.uniform(-0.05, 0.05), ln, usadas)
+                if carta_id:
+                    usadas.add(carta_id)
+                    self.con.execute("INSERT INTO plantilla (equipo_id, carta_id) VALUES (?, ?)", (eid, carta_id))
+        return eid
+
+    def iniciar_escalera(self, rival: dict | None = None, en_vivo: bool = True) -> int:
+        """Busca partido por copas. `rival`: {"pid", "copas", "datos": exportar_equipo()} de otro jugador,
+        o None para jugar contra un bot de tu cancha. Devuelve el id del partido."""
+        if self.partido_en_vivo():
+            raise ErrorJuego("Ya tienes un partido en curso.")
+        rng = random.Random()
+        if rival:
+            eid = self._importar_amigo(rival["pid"], rival["datos"])
+            info = {"rival_copas": int(rival.get("copas") or 0), "rival_tipo": "jugador", "rival_pid": rival["pid"]}
+        else:
+            eid = self._bot_escalera(self.cancha, rng)
+            info = {"rival_copas": max(0, self.copas + rng.randint(-40, 40)), "rival_tipo": "bot"}
+        info["copas_antes"] = self.copas
+        local, visita = (self.usuario_id, eid) if rng.random() < 0.5 else (eid, self.usuario_id)
+        pid = self.con.execute(
+            "INSERT INTO partidos (temporada, fecha, division, tipo, local_id, visita_id) VALUES (?, 0, -3, 'escalera', ?, ?)",
+            (self.temporada, local, visita)).lastrowid
+        if en_vivo:
+            self._set("vivo", {"partido": pid, "decisiones": [], "intervenciones": [], "escalera": info})
+            self.con.commit()
+            return pid
+        p = self.partido(pid)
+        loc, vis, semilla = self._preparar(p)
+        sim = Simulacion(loc, vis, "escalera", semilla)
+        res = sim.jugar()
+        self._cerrar_escalera(p, res, 0 if local == self.usuario_id else 1, semilla, loc, vis, sim.posesion_min, info)
+        self.con.commit()
+        return pid
+
+    def _cerrar_escalera(self, p, res, lado: int, semilla: int, local: Equipo, visita: Equipo, posesion, info: dict):
+        """Resultado de un partido por copas: copas, monedas, sobre por tiempo, lesiones y tarjetas."""
+        self._registrar(p["id"], res)
+        self._guardar_detalle(p["id"], res, semilla, local, visita, posesion)
+        uid = self.usuario_id
+        # cada partido cuenta como una "fecha" para lesiones y suspensiones de tu plantel
+        self.con.execute("UPDATE plantilla SET lesion = MAX(lesion - 1, 0), suspension = MAX(suspension - 1, 0)"
+                         " WHERE equipo_id = ?", (uid,))
+        self._aplicar_sanciones(res)
+        g = res.ganador
+        resultado = "empate" if g < 0 else "victoria" if g == lado else "derrota"
+        antes, cancha_antes = self.copas, self.cancha
+        delta = ESC.cambio_copas(antes, info.get("rival_copas", antes), resultado)
+        nuevas = max(ESC.piso(self.max_copas), antes + delta)
+        self._set("copas", nuevas)
+        self._set("max_copas", max(self.max_copas, nuevas))
+        monto = economia.PREMIO_PARTIDO[resultado] + economia.PREMIO_GOL * res.goles[lado]
+        monto = int(monto * ESC.multiplicador_monedas(cancha_antes))
+        self._mover_monedas(monto, f"Partido por copas: {resultado}")
+        sobre = None
+        if resultado == "victoria":
+            sobres = self._get("sobres_tiempo") or []
+            if len(sobres) < ESC.ESPACIOS_SOBRES:
+                ciclo = self._get("ciclo_sobres") or 0
+                tipo = ESC.CICLO_SOBRES[ciclo % len(ESC.CICLO_SOBRES)]
+                sobre = {"id": int(time.time() * 1000), "tipo": tipo, "cancha": self.cancha, "desbloqueo": None}
+                self._set("sobres_tiempo", sobres + [sobre])
+                self._set("ciclo_sobres", ciclo + 1)
+        rival_id = p["visita_id"] if lado == 0 else p["local_id"]
+        resumen = {"resultado": resultado, "copas_antes": antes, "copas": nuevas, "delta": nuevas - antes,
+                   "cancha_antes": cancha_antes, "cancha": self.cancha, "sube": self.cancha > cancha_antes,
+                   "monedas": monto, "sobre": sobre and sobre["tipo"], "sin_espacio": resultado == "victoria" and not sobre,
+                   "rival": self.nombre_equipo(rival_id), "rival_tipo": info.get("rival_tipo", "bot"),
+                   "rival_copas": info.get("rival_copas")}
+        detalle = json.loads(self.partido(p["id"])["detalle"] or "{}")
+        detalle["escalera"] = resumen
+        self.con.execute("UPDATE partidos SET detalle = ? WHERE id = ?", (json.dumps(detalle, ensure_ascii=False), p["id"]))
+        self._set("historial_escalera", ([{"partido": p["id"], "goles": [res.goles[lado], res.goles[1 - lado]], **resumen}]
+                                         + (self._get("historial_escalera") or []))[:30])
+        return resumen
+
+    @property
+    def historial_escalera(self) -> list[dict]:
+        return self._get("historial_escalera") or []
+
+    # ---------------- sobres por tiempo (se ganan al ganar partidos por copas)
+
+    def sobres_tiempo(self) -> list[dict]:
+        ahora = time.time()
+        salida = []
+        for s in self._get("sobres_tiempo") or []:
+            s = {**s, "tipo": ESC.LEGADO_SOBRES.get(s["tipo"], s["tipo"])}
+            cfg = {k: v for k, v in ESC.SOBRES_TIEMPO[s["tipo"]].items() if k != "precio"}
+            total = cfg["horas"] * 3600
+            if s["desbloqueo"] is None:
+                estado, restante = "bloqueado", total
+            else:
+                restante = max(0, s["desbloqueo"] + total - ahora)
+                estado = "listo" if restante <= 0 else "abriendo"
+            salida.append({**s, **cfg, "estado": estado, "restante": int(restante),
+                           "costo_ya": ESC.costo_abrir_ya(restante), "cancha_nombre": ESC.CANCHAS[s["cancha"]][0]})
+        return salida
+
+    def desbloquear_sobre(self, sobre_id: int):
+        sobres = self._get("sobres_tiempo") or []
+        if any(s["estado"] == "abriendo" for s in self.sobres_tiempo()):
+            raise ErrorJuego("Ya se está desbloqueando otro sobre: se abren de a uno.")
+        s = next((s for s in sobres if s["id"] == sobre_id), None)
+        if not s:
+            raise ErrorJuego("Ese sobre no existe.")
+        if s["desbloqueo"] is None:
+            s["desbloqueo"] = time.time()
+            self._set("sobres_tiempo", sobres)
+            self.con.commit()
+
+    def abrir_sobre_tiempo(self, sobre_id: int, pagar: bool = False) -> list[FichaJugador]:
+        """Abre un sobre listo (o paga monedas para abrirlo ya). Trae jugadores de tu liga según su cancha."""
+        estado = next((s for s in self.sobres_tiempo() if s["id"] == sobre_id), None)
+        if not estado:
+            raise ErrorJuego("Ese sobre no existe.")
+        if estado["estado"] != "listo":
+            if not pagar:
+                raise ErrorJuego("Ese sobre todavía no está listo.")
+            if self.monedas < estado["costo_ya"]:
+                raise ErrorJuego(f"Necesitas {estado['costo_ya']:,} monedas para abrirlo ya.".replace(",", "."))
+            self._mover_monedas(-estado["costo_ya"], f"Abrir ya: {estado['nombre']}")
+        rng = random.Random()
+        # los sobres por tiempo traen solo cartas (los objetos salen en los de la tienda)
+        nuevos, _ = self._llenar_sobre(rng, {**ESC.SOBRES_TIEMPO[estado["tipo"]], "objeto": 0}, estado["cancha"])
+        self._set("sobres_tiempo", [s for s in self._get("sobres_tiempo") or [] if s["id"] != sobre_id])
+        self.con.commit()
+        por_pid = {f.pid: f for f in self.plantel()}
+        return sorted((por_pid[p] for p in nuevos), key=lambda f: f.carta.ovr)
+
+    # ------------------------------------------------------------ desafíos entre amigos
+
+    # la web la reemplaza para anotar el resultado en el registro compartido de desafíos
+    al_terminar_desafio = None
+
+    def exportar_equipo(self) -> dict:
+        """Tu club tal como está (once, suplentes, formación y mejoras) para que un amigo juegue contra él."""
+        uid = self.usuario_id
+        e = self.equipo(uid)
+        filas = self.con.execute(
+            "SELECT p.puesto, p.nivel, c.* FROM plantilla p JOIN cartas c ON c.id = p.carta_id WHERE p.equipo_id = ?"
+            " ORDER BY p.puesto IS NULL, p.puesto, c.ovr + p.nivel DESC LIMIT 30", (uid,)).fetchall()
+        campos = ["nombre", "alias", "posicion", "club", "nacion", "liga", "ovr", *[k.lower() for k in STATS], "precio", "edad"]
+        return {"nombre": e["nombre"], "escudo": e["escudo"], "estadio": e["estadio"], "formacion": e["formacion"],
+                "mentalidad": e["mentalidad"], "fuerza": round(self.fuerza_equipo(uid), 1),
+                "jugadores": [{"carta": {k: f[k] for k in campos}, "puesto": f["puesto"], "nivel": f["nivel"] or 1}
+                              for f in filas]}
+
+    def _cargar_plantel(self, eid: int, jugadores: list[dict]):
+        """Reemplaza el plantel del equipo `eid` por los jugadores exportados (carta, puesto, nivel)."""
+        self.con.execute("DELETE FROM plantilla WHERE equipo_id = ?", (eid,))
+        for j in jugadores:
+            c = j["carta"]
+            fila = self.con.execute("SELECT id FROM cartas WHERE nombre = ? AND club = ? AND posicion = ?",
+                                    (c["nombre"], c["club"], c["posicion"])).fetchone()
+            carta_id = fila["id"] if fila else self.con.execute(
+                f"INSERT INTO cartas ({', '.join(c)}) VALUES ({', '.join('?' * len(c))})", tuple(c.values())).lastrowid
+            self.con.execute("INSERT INTO plantilla (equipo_id, carta_id, puesto, nivel) VALUES (?, ?, ?, ?)",
+                             (eid, carta_id, j["puesto"], j["nivel"]))
+
+    def sincronizar_liga_amigos(self, amigos: dict[str, dict]) -> dict[str, int]:
+        """Los clubes de tus amigos que están en tu misma división (Bronce, Plata u Oro en SU partida)
+        juegan tu liga: cada uno toma el lugar de un bot de tu división (se queda con sus puntos y su
+        fixture). Si el amigo cambia de división, el bot vuelve.
+
+        `amigos`: {id de partida: exportar_equipo() + {"division": "bronce"|"plata"|"oro"}}.
+        Devuelve {id de partida: equipo_id} de los que están en tu liga.
+        """
+        if not self.existe or self.n_divisiones == 1:
+            return {}
+        liga = self._get("liga_amigos", {})
+        mi_div = self.division
+        vivo = self._get("vivo") or {}
+        en_juego = set()
+        if vivo.get("partido"):
+            fila = self.con.execute("SELECT local_id, visita_id FROM partidos WHERE id = ?", (vivo["partido"],)).fetchone()
+            en_juego = set(fila) if fila else set()
+        validos = {pid for pid, d in amigos.items()
+                   if d.get("division") == self.clave_division() and len(d.get("jugadores", [])) >= 11}
+
+        # vuelven los bots de quienes ya no corresponden (otra división, o el amigo ya no está)
+        for pid, v in list(liga.items()):
+            if v["equipo"] in en_juego:
+                continue
+            if pid not in validos or self.division_de(v["equipo"]) != mi_div:
+                o = v["original"]
+                self.con.execute("UPDATE equipos SET nombre = ?, nombre_real = ?, estadio = ?, escudo = ?, estadio_img = ?,"
+                                 " formacion = ?, mentalidad = ? WHERE id = ?",
+                                 (o["nombre"], o["nombre_real"], o["estadio"], o["escudo"], o["estadio_img"],
+                                  o["formacion"], o["mentalidad"], v["equipo"]))
+                self.con.execute("DELETE FROM plantilla WHERE equipo_id = ?", (v["equipo"],))
+                for carta_id, puesto, nivel in o["plantilla"]:
+                    self.con.execute("INSERT INTO plantilla (equipo_id, carta_id, puesto, nivel) VALUES (?, ?, ?, ?)",
+                                     (v["equipo"], carta_id, puesto, nivel))
+                del liga[pid]
+
+        # los que entran toman el lugar del bot más débil de tu división
+        ocupados = {v["equipo"] for v in liga.values()}
+        for pid in sorted(validos - set(liga)):
+            libres = [e["id"] for e in self.con.execute("SELECT id FROM equipos WHERE division = ? AND es_usuario = 0",
+                                                        (mi_div,)) if e["id"] not in ocupados and e["id"] not in en_juego]
+            if not libres:
+                break
+            eid = min(libres, key=self.fuerza_equipo)
+            e = self.equipo(eid)
+            liga[pid] = {"equipo": eid, "firma": None, "original": {
+                "nombre": e["nombre"], "nombre_real": e["nombre_real"], "estadio": e["estadio"], "escudo": e["escudo"],
+                "estadio_img": e["estadio_img"], "formacion": e["formacion"], "mentalidad": e["mentalidad"],
+                "plantilla": [tuple(r) for r in self.con.execute(
+                    "SELECT carta_id, puesto, nivel FROM plantilla WHERE equipo_id = ?", (eid,))]}}
+            ocupados.add(eid)
+
+        # al día con lo que tiene armado tu amigo (el plantel solo si cambió, así no se pierden sus goles)
+        for pid, v in liga.items():
+            if v["equipo"] in en_juego:
+                continue
+            d, eid = amigos[pid], v["equipo"]
+            nombre = d["nombre"]
+            if self.con.execute("SELECT 1 FROM equipos WHERE lower(nombre) = lower(?) AND id != ? AND es_usuario != ?",
+                                (nombre, eid, AMIGO)).fetchone():
+                nombre = f"{nombre} (amigo)"
+            self.con.execute("UPDATE equipos SET nombre = ?, nombre_real = '', estadio = ?, escudo = ?, estadio_img = '',"
+                             " formacion = ?, mentalidad = ? WHERE id = ?",
+                             (nombre, d.get("estadio") or f"Estadio {nombre}", d.get("escudo") or "",
+                              d.get("formacion") or "4-3-3", d.get("mentalidad") or "equilibrada", eid))
+            firma = json.dumps(d["jugadores"], sort_keys=True, ensure_ascii=False)
+            if firma != v["firma"]:
+                self._cargar_plantel(eid, d["jugadores"])
+                v["firma"] = firma
+        self._set("liga_amigos", liga)
+        self.con.commit()
+        return {pid: v["equipo"] for pid, v in liga.items()}
+
+    def _importar_amigo(self, amigo: str, datos: dict) -> int:
+        """Copia (o actualiza) el club de un amigo en tu partida, fuera de toda división."""
+        amigos = self._get("amigos", {})
+        eid = amigos.get(amigo)
+        if eid and not self.equipo(eid):
+            eid = None
+        nombre = datos["nombre"]
+        choca = self.con.execute("SELECT id FROM equipos WHERE lower(nombre) = lower(?) AND id IS NOT ?", (nombre, eid)).fetchone()
+        if choca:
+            nombre = f"{nombre} (amigo)"
+        valores = (nombre, datos.get("estadio") or f"Estadio {nombre}", datos.get("escudo") or "",
+                   datos.get("formacion") or "4-3-3", datos.get("mentalidad") or "equilibrada")
+        if eid:
+            self.con.execute("UPDATE equipos SET nombre = ?, estadio = ?, escudo = ?, formacion = ?, mentalidad = ? WHERE id = ?",
+                             (*valores, eid))
+        else:
+            eid = self.con.execute(
+                "INSERT INTO equipos (nombre, estadio, escudo, formacion, mentalidad, es_usuario, division) VALUES (?, ?, ?, ?, ?, ?, -1)",
+                (*valores, AMIGO)).lastrowid
+            amigos[amigo] = eid
+            self._set("amigos", amigos)
+        self._cargar_plantel(eid, datos["jugadores"])
+        return eid
+
+    def desafiar(self, amigo: str, datos: dict, de_local: bool = True) -> int:
+        """Partido amistoso en vivo contra el club de un amigo (tal como lo tiene armado ahora)."""
+        if self.partido_en_vivo():
+            raise ErrorJuego("Ya tienes un partido en curso.")
+        if len(datos.get("jugadores", [])) < 11:
+            raise ErrorJuego("Ese club todavía no tiene 11 jugadores.")
+        eid = self._importar_amigo(amigo, datos)
+        local, visita = (self.usuario_id, eid) if de_local else (eid, self.usuario_id)
+        pid = self.con.execute(
+            "INSERT INTO partidos (temporada, fecha, division, tipo, local_id, visita_id) VALUES (?, 0, -1, 'amistoso', ?, ?)",
+            (self.temporada, local, visita)).lastrowid
+        self._set("vivo", {"partido": pid, "decisiones": [], "intervenciones": [], "desafio": amigo})
         self.con.commit()
         return pid
 

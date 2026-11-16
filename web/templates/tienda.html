@@ -2,7 +2,9 @@
 {% block contenido %}
 <section class="tarjeta">
   <h2>Sobres</h2>
-  <p class="tenue">Cada carta sale de un nivel según las probabilidades de abajo. Bronce: OVR menor a 65 · Plata: 65 a 74 · Oro: 75 o más.</p>
+  <p class="tenue">Todas las cartas son de <b>tu liga ({{ cancha.bandera }} {{ cancha.pais }})</b> y su calidad depende de tu cancha
+    (<b>{{ cancha.ico }} {{ cancha.nombre }}</b>): mientras más subas, mejores jugadores.</p>
+  <ul class="calidades">{% for k, txt in calidades.items() %}<li><span class="punto {{ k }}"></span><b>{{ k|capitalize }}</b>: {{ txt|lower }}</li>{% endfor %}</ul>
   <p class="tenue">Además pueden salir <b>escudos y estadios de colección</b> (tienes {{ objetos_tengo }} de {{ objetos_total }}). Se equipan en tu club desde el Inventario o el Perfil.</p>
   <div class="sobres">
     <div class="sobre-prod gratis" id="prod-gratis">
@@ -53,6 +55,7 @@
 <script>
 (() => {
   const {carta, reanimar, api, toast, confeti, esc} = FGM;
+  const SND = window.FGM_SONIDO.sobre;
   const $ = id => document.getElementById(id);
   const ap = $('apertura'), sobre = $('ap-sobre'), pila = $('ap-pila'), reveladas = $('ap-reveladas'), ayuda = $('ap-ayuda');
   const RANGO = {bronce: 0, plata: 1, oro: 2};
@@ -63,10 +66,14 @@
     document.querySelectorAll('.abrir').forEach(b => b.disabled = m < +b.dataset.precio);
   }
 
+  let comprando = false;
   document.querySelectorAll('.abrir').forEach(b => b.onclick = async () => {
+    if (comprando || estado !== 'cerrado') return;   // doble toque: un solo sobre
+    comprando = true;
     let r;
     try { r = await api('/api/sobre/' + b.dataset.clave); }
     catch (e) { toast(e.message, {error: true}); return; }
+    finally { comprando = false; }
     FGM.monedas(r.monedas);
     abrir(b.dataset.clave, b.closest('.sobre-prod').querySelector('h3').textContent, r.cartas.concat(r.objetos || []));
   });
@@ -90,6 +97,7 @@
     if (cola.some(c => c.nivel === 'oro')) sobre.classList.add('brilla');
     ap.hidden = false;
     reanimar(sobre, 'agita');
+    SND.agitar();
     ayuda.textContent = 'Toca el sobre para abrirlo';
     estado = 'sobre';
   }
@@ -99,6 +107,7 @@
     if (estado !== 'sobre') return;
     estado = 'animando';
     sobre.classList.add('rompe');
+    SND.rasgar();
     setTimeout(() => {
       cola.forEach((c, i) => {
         const el = document.createElement('div');
@@ -134,12 +143,15 @@
     const c = cola[0];
     if (!arriba.classList.contains('volteada')) {
       arriba.classList.add('volteada');
+      SND.voltear();
+      setTimeout(() => SND.revelar(c.tipo ? (c.nivel || 'plata') : c.nivel), 250);
       if (c.nivel === 'oro') { setTimeout(() => { confeti(90); reanimar(ap, 'destello'); }, 350); }
       ayuda.innerHTML = cola.length > 1 ? `Toca para la siguiente · <b>${total - cola.length + 1} / ${total}</b>` : 'Toca para terminar';
       return;
     }
     estado = 'animando';
     arriba.classList.add('fuera');
+    SND.deslizar();
     cola.shift();
     setTimeout(() => {
       arriba.remove();
@@ -161,6 +173,7 @@
     $('ap-saltar').hidden = true;
     ayuda.textContent = '¡Listo! Las cartas ya están en tu plantel.';
     reveladas.classList.add('final');
+    SND.final();
     $('ap-botones').hidden = false;
   }
 
@@ -177,7 +190,7 @@
     resto();
   };
 
-  $('ap-cerrar').onclick = () => { ap.hidden = true; estado = 'cerrado'; actualizarBotones(); };
+  $('ap-cerrar').onclick = () => { if (estado !== 'fin') return; ap.hidden = true; estado = 'cerrado'; actualizarBotones(); };
 
   // ---------- carta gratis cada 8 horas (cuenta regresiva)
   const btnGratis = $('btn-gratis');

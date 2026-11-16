@@ -116,6 +116,15 @@ def _percentil(valor: float, poblacion: list[float]) -> float:
     return (menores + 0.5 * iguales) / len(poblacion)
 
 
+def _z(valor: float, poblacion: list[float], tope: float = 3.0) -> float:
+    """Desviaciones respecto del promedio de la población (acotado a ±tope)."""
+    if len(poblacion) < 3:
+        return 0.0
+    media = sum(poblacion) / len(poblacion)
+    desv = math.sqrt(sum((v - media) ** 2 for v in poblacion) / len(poblacion)) or 1
+    return max(-tope, min(tope, (valor - media) / desv))
+
+
 def _efecto_edad(edad: float | None) -> float:
     if edad is None:
         return 0.0
@@ -285,6 +294,9 @@ class Valorador:
             e = self.escala
             f["ovr"] = int(max(e["min"], min(e["max"], round(e["media"] + e["desv"] * z))))
             f["atributos"] = self._atributos(f)
+            fijos = getattr(self, "atributos_fijos", {}).get(str(f["jugador"].get("id_365")))
+            if fijos:
+                f["atributos"].update(fijos)
             f["precio"] = precio(f["ovr"], f["edad"])
         return filas
 
@@ -307,6 +319,109 @@ class Valorador:
         for k in attrs:
             attrs[k] = int(max(15, min(95, round(attrs[k] + rng.gauss(0, 2.2)))))
         return attrs
+
+
+class Valorador365(Valorador):
+    """Valoración con los datos de 365Scores (scraper/liga_365.py).
+
+    Componentes (en puntos crudos, luego se escalan a la liga):
+      - puntaje: el puntaje promedio de 365Scores en la temporada, en percentil dentro de su línea
+        (POR/DEF/MED/DEL), ponderado por la confianza (partidos jugados);
+      - rol: qué parte de los partidos de su equipo jugó (titular habitual vs. suplente/juvenil);
+      - aporte: goles y asistencias por partido (pesa más en delanteros), arqueros: vallas invictas
+        y goles recibidos por partido;
+      - club (puntos por partido en la tabla), edad, selección adulta y un pequeño azar fijo por
+        jugador (con su id de 365Scores, así no cambia si se corrige el nombre).
+    """
+    PESOS_365 = {"puntaje": 13.0, "rol": 5.0, "club": 7.0, "seleccion": 4.0,
+                 "aporte": {"DEL": 6.0, "MED": 3.0, "DEF": 1.0, "POR": 4.0}}
+
+    def _preparar(self):
+        tabla = self.stats["tabla"]
+        ppg = {club: t["puntos"] / max(t["pj"], 1) for club, t in tabla.items()}
+        lo, hi = min(ppg.values()), max(ppg.values())
+        self.nivel_club = {club: (v - lo) / (hi - lo or 1) for club, v in ppg.items()}
+        self.pj_equipo = max(t["pj"] for t in tabla.values())
+
+    def calcular(self) -> list[dict]:
+        filas = []
+        for club in self.planteles["clubes"]:
+            nombre_tabla = club["club"] if club["club"] in self.nivel_club else self._club_en_tabla(club["club"])
+            for j in club["jugadores"]:
+                s = j.get("stats") or {}
+                pj = s.get("pj") or 0
+                otra = bool(s.get("otra_competicion"))
+                conf = min(1.0, pj / 12) * (0.6 if otra else 1.0)
+                pj_equipo = s.get("pj_equipo") or self.pj_equipo
+                if j["posicion"] == "POR":
+                    gr = s.get("goles_recibidos")
+                    aporte = 0.5 if not pj or gr is None else max(0.0, min(1.0, 0.5 + 0.6 * (s.get("vallas_invictas", 0) / pj - 0.25)
+                                                                          - 0.35 * (gr / pj - 1.2)))
+                else:
+                    aporte = (s.get("goles", 0) + 0.7 * s.get("asistencias", 0)) / max(pj, 1)
+                filas.append({"jugador": j, "club": club["club"], "club_tabla": nombre_tabla, "puesto": j["puesto"],
+                              "linea": j["posicion"], "edad": _edad(j["nacimiento"], self.hoy) if j["nacimiento"] else None,
+                              "perfil": {"estatura_cm": j.get("altura_cm")}, "puntaje": s.get("puntaje"),
+                              "rol": 0.0 if otra else min(1.0, pj / max(pj_equipo, 1)), "aporte": aporte, "confianza": conf,
+                              "detalle": {"pj_estimado": max(pj, 1), "goles": s.get("goles", 0),
+                                          "asistencias": s.get("asistencias", 0), "puntaje": s.get("puntaje"),
+                                          "otra_competicion": s.get("otra_competicion", "")}})
+
+        # percentiles dentro de cada línea (solo quienes jugaron lo suficiente para ser representativos)
+        for linea in ("POR", "DEF", "MED", "DEL"):
+            de_linea = [f for f in filas if f["linea"] == linea]
+            pobl_puntaje = [f["puntaje"] for f in de_linea if f["puntaje"] is not None and f["confianza"] >= 0.4]
+            pobl_aporte = [f["aporte"] for f in de_linea if f["confianza"] >= 0.4]
+            for f in de_linea:
+                # cuántas desviaciones se aleja del promedio de su línea (así un 7.8 destaca sobre un 7.1)
+                f["p_puntaje"] = 0.5 + _z(f["puntaje"], pobl_puntaje) / 6 if f["puntaje"] is not None else 0.5
+                f["p_aporte"] = f["aporte"] if linea == "POR" else 0.5 + _z(f["aporte"], pobl_aporte) / 6
+
+        P = self.PESOS_365
+        for f in filas:
+            j = f["jugador"]
+            comp = {
+                "puntaje": P["puntaje"] * (f["p_puntaje"] - 0.5) * f["confianza"],
+                "rol": P["rol"] * (f["rol"] - 0.45),
+                "aporte": P["aporte"][f["linea"]] * (f["p_aporte"] - 0.5) * f["confianza"],
+                "club": P["club"] * (self.nivel_club.get(f["club_tabla"], 0.5) - 0.5),
+                # el declive por edad pesa menos si el jugador está rindiendo (con muchos partidos)
+                "edad": _efecto_edad(f["edad"]) * ((1 - 0.6 * f["confianza"]) if (f["edad"] or 0) > 31 else 1),
+                "seleccion": P["seleccion"] * min(1.0, (j.get("partidos_seleccion") or 0) / 60),
+                "azar": random.Random(_semilla(f"365-{j.get('id_365') or j['nombre']}")).gauss(0, 1.0),
+            }
+            f["componentes"] = {k: round(v, 2) for k, v in comp.items()}
+            f["crudo"] = sum(comp.values())
+
+        # la escala se calcula sin los jugadores agregados a mano (así no mueven el OVR de los demás)
+        base = [f for f in filas if not f["jugador"].get("manual")] or filas
+        media = sum(f["crudo"] for f in base) / len(base)
+        desv = math.sqrt(sum((f["crudo"] - media) ** 2 for f in base) / len(base)) or 1
+        forzados = getattr(self, "forzados", {})
+        for f in filas:
+            e = self.escala
+            f["ovr"] = int(max(e["min"], min(e["max"], round(e["media"] + e["desv"] * (f["crudo"] - media) / desv))))
+            # OVR fijado a mano (data/ovr_manual_<liga>_<anio>.json), p. ej. figuras que los números no reflejan
+            manual = forzados.get(str(f["jugador"].get("id_365")))
+            if manual:
+                f["componentes"]["manual"] = manual - f["ovr"]
+                f["ovr"] = int(manual)
+            f["atributos"] = self._atributos(f)
+            fijos = getattr(self, "atributos_fijos", {}).get(str(f["jugador"].get("id_365")))
+            if fijos:
+                f["atributos"].update(fijos)
+            f["precio"] = precio(f["ovr"], f["edad"])
+        return filas
+
+    def _atributos(self, f: dict) -> dict:
+        # misma base que antes, pero el azar de los atributos también usa el id de 365Scores
+        j = f["jugador"]
+        nombre = j["nombre"]
+        j["nombre"] = f"365-{j.get('id_365') or nombre}"
+        try:
+            return super()._atributos(f)
+        finally:
+            j["nombre"] = nombre
 
 
 def club_seed(f: dict) -> str:
@@ -339,11 +454,25 @@ def main():
 
     planteles = json.loads(Path(archivo_planteles(args.liga, args.anio)).read_text(encoding="utf-8"))
     stats = json.loads(Path(archivo_stats(args.liga, args.anio)).read_text(encoding="utf-8"))
-    filas = Valorador(planteles, stats, escala=cfg["ovr"]).calcular()
+    desde_365 = planteles.get("fuente") == "365"
+    valorador = (Valorador365 if desde_365 else Valorador)(planteles, stats, escala=cfg["ovr"])
+    ruta_manual = Path(f"data/ovr_manual_{args.liga}_{args.anio}.json")
+    if ruta_manual.exists():
+        # {"<id_365>": {"ovr": 83, "nombre": "...", "motivo": "..."}}
+        valorador.forzados = {k: v["ovr"] for k, v in json.loads(ruta_manual.read_text(encoding="utf-8")).items()}
+        valorador.atributos_fijos = {k: v["atributos"] for k, v in json.loads(ruta_manual.read_text(encoding="utf-8")).items()
+                                     if v.get("atributos")}
+        print(f"OVR manual: {len(valorador.forzados)} jugadores")
+    filas = valorador.calcular()
+    if desde_365:
+        # planteles de 365Scores: ya están al día; solo quedan fuera quienes no tienen foto (juveniles)
+        antes = len(filas)
+        filas = [f for f in filas if f["jugador"].get("tiene_foto", True)]
+        print(f"365Scores: {antes - len(filas)} jugadores sin foto quedan fuera")
     # apellidos de 365Scores para quienes en Wikipedia tienen un solo nombre ("Danilo" -> "Danilo Santos");
     # se aplican después de calcular para no cambiar las valoraciones (el nombre es semilla del azar)
     ruta_nombres = Path(f"data/nombres_365_{args.liga}_{args.anio}.json")
-    if ruta_nombres.exists():
+    if ruta_nombres.exists() and not desde_365:
         completos = json.loads(ruta_nombres.read_text(encoding="utf-8"))
         for club in planteles["clubes"]:
             for j in club["jugadores"]:
@@ -354,7 +483,7 @@ def main():
     # planteles como están hoy en 365Scores (scraper.fotos_365 --depurar): fuera juveniles y ex jugadores,
     # y traspasos dentro de la liga. Se aplica después de calcular para no mover el OVR de los demás.
     ruta_ajustes = Path(f"data/ajustes_365_{args.liga}_{args.anio}.json")
-    if ruta_ajustes.exists():
+    if ruta_ajustes.exists() and not desde_365:
         ajustes = json.loads(ruta_ajustes.read_text(encoding="utf-8"))
         excluir = set(ajustes.get("excluir", []))
         clave = lambda f: f'{f["jugador"]["nombre"].split("(")[0].strip()}|{f["club_tabla"]}'
@@ -390,7 +519,7 @@ def main():
             j = f["jugador"]
             w.writerow({"Nombre": j["nombre"].split("(")[0].strip(), "Alias": alias[id(f)],
                         "Posición": f["puesto"], "Club": f["club_tabla"],
-                        "Nación": PAISES.get(j["nacionalidad"]) or j["nacionalidad"].title(), "Liga": cfg["nombre"],
+                        "Nación": PAISES.get(j["nacionalidad"]) or (j["nacionalidad"].title() if j["nacionalidad"].isupper() else j["nacionalidad"]), "Liga": cfg["nombre"],
                         "OVR": f["ovr"], **f["atributos"], "Precio": f["precio"],
                         "Edad": int(f["edad"]) if f["edad"] else "", "Dorsal": j["dorsal"]})
 

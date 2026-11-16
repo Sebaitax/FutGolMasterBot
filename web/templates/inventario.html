@@ -8,7 +8,7 @@
   <p class="tenue">Las cartas repetidas sirven para <b>mejorar</b>: cada mejora gasta una copia y monedas, y suma +1 a la media y a todos los atributos (hasta 4 estrellas).</p>
 
   <div class="inv-filtros">
-    <input id="buscar" type="search" placeholder="Buscar jugador o club…">
+    <div id="filtro-cartas"></div>
     <select id="orden">
       <option value="ovr">Mayor media</option>
       <option value="nombre">Nombre</option>
@@ -52,15 +52,15 @@
 <script>
 (() => {
   const D = JSON.parse(document.getElementById('datos').textContent);
-  const {carta, esc, linea, api, toast, reanimar, confeti, ETQ} = FGM;
+  const {carta, esc, linea, api, toast, reanimar, confeti, ETQ, filtroCartas} = FGM;
   const $ = id => document.getElementById(id);
   let fichas = D.fichas, filtroLinea = '', filtroNivel = '', extras = new Set();
 
+  const fc = filtroCartas($('filtro-cartas'), () => fichas, () => pintar());
   function lista() {
-    const q = $('buscar').value.trim().toLowerCase();
     let l = fichas.filter(f =>
       (!filtroLinea || linea(f.pos) === filtroLinea) && (!filtroNivel || f.nivel === filtroNivel) &&
-      (!q || (f.completo + ' ' + f.club).toLowerCase().includes(q)) &&
+      fc.pasa(f) &&
       (!extras.has('mejorar') || f.puede_mejorar) && (!extras.has('repetidas') || f.copias > 1) &&
       (!extras.has('once') || f.en_once) && (!extras.has('fuera') || f.estado !== 'disponible'));
     const orden = $('orden').value;
@@ -81,7 +81,6 @@
   }
 
   // ---------- filtros
-  $('buscar').oninput = pintar;
   $('orden').onchange = pintar;
   $('lineas').onclick = e => { const b = e.target.closest('button'); if (!b) return; filtroLinea = b.dataset.f; marcar('lineas', b); pintar(); };
   $('niveles').onclick = e => { const b = e.target.closest('button'); if (!b) return; filtroNivel = b.dataset.n; marcar('niveles', b); pintar(); };

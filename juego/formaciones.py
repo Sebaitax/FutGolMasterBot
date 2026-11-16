@@ -2,10 +2,11 @@
 
 Química (solo afecta a tu club; los bots quedan neutros):
 - Cada puesto está enlazado con sus vecinos en la cancha.
-- Enlace verde = mismo club (2 pts), amarillo = misma nación (1 pt), rojo = nada (0).
+- Enlace verde = mismo club, o misma liga y misma nación a la vez (2 pts);
+  amarillo = misma liga o misma nación (1 pt); rojo = nada (0).
 - La química de un jugador es el promedio de sus enlaces (0 a 1). Si juega fuera de
   su posición (rinde menos del 90%), vale la mitad.
-- En el partido rinde entre 0,97 y 1,03 según su química.
+- En el partido rinde entre 0,96 y 1,05 según su química (con ~45 queda igual que un bot).
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ COORDENADAS = {
     "3-5-2": [(50, 92), (24, 72), (50, 75), (76, 72), (9, 45), (30, 43), (50, 55), (70, 43), (91, 45), (35, 14), (65, 14)],
     "5-3-2": [(50, 92), (9, 59), (29, 72), (50, 75), (71, 72), (91, 59), (25, 42), (50, 46), (75, 42), (35, 14), (65, 14)],
 }
+PISO_QUIMICA, BONO_QUIMICA = 0.96, 0.09  # química 0 = -4 %, 100 = +5 %
 VECINOS = 2  # cada puesto se enlaza con sus 2 compañeros más cercanos
 
 
@@ -40,12 +42,10 @@ ENLACES = {f: _enlaces(f) for f in FORMACIONES}
 
 
 def valor_enlace(a, b) -> int:
-    """a y b son Cartas. 2 = mismo club, 1 = misma nación, 0 = sin relación."""
+    """a y b son Cartas. 2 = mismo club (o misma liga y nación), 1 = misma liga o nación, 0 = sin relación."""
     if a.club and a.club == b.club:
         return 2
-    if a.nacion and a.nacion == b.nacion:
-        return 1
-    return 0
+    return min(2, int(bool(a.liga) and a.liga == b.liga) + int(bool(a.nacion) and a.nacion == b.nacion))
 
 
 def quimica(formacion: str, cartas: list) -> dict:
@@ -74,4 +74,4 @@ def quimica(formacion: str, cartas: list) -> dict:
 
 
 def factor_quimica(q: float) -> float:
-    return 0.97 + 0.06 * q
+    return PISO_QUIMICA + BONO_QUIMICA * q

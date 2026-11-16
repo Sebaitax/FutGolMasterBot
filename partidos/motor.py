@@ -65,11 +65,167 @@ TACTICAS = {
 PAUSAS_TACTICAS = 2      # pausas para hacer cambios cuando quieras (además del entretiempo)
 ESPERA_TACTICA = 10      # minutos entre cambios de táctica
 MAX_MOMENTOS = 4         # momentos clave por partido (tú decides la jugada)
-PROB_MOMENTO = 0.35      # de cada ocasión tuya, cuántas se vuelven momento clave
+PROB_MOMENTO = 0.45      # de cada ocasión tuya, cuántas se vuelven momento clave
 SEPARACION_MOMENTOS = 8  # minutos mínimos entre momentos clave
 # calidad extra de la ocasión según lo que elijas en un momento clave
 CALIDAD_MOMENTO = {"tirar": 1.1, "pasar": 1.35, "gambetear": 1.65}
 LADOS_PENAL = ("izq", "centro", "der")
+
+# Contras de tácticas (ciclo): cada una le gana a una y pierde con otra. "Normal" es neutra.
+#   presión > centros > cuidar > contragolpe > presión
+VENCE = {"presion": "centros", "centros": "cuidar", "cuidar": "contragolpe", "contragolpe": "presion"}
+VENTAJA_TACTICA = 1.25       # llegadas del que acierta la contra
+DESVENTAJA_TACTICA = 0.85    # llegadas del que queda contrado
+MINUTOS_LECTURA = 3          # minutos que tarda en "leerse" la táctica nueva del rival
+
+# Momento clave según cómo está parado el rival: qué jugada sale mejor (premio a leerlo)
+AJUSTE_MOMENTO = {
+    "presion": {"pasar": 1.25, "gambetear": 0.9},      # adelantado: espacio a la espalda
+    "cuidar": {"tirar": 1.2, "pasar": 0.8, "gambetear": 0.85},   # encerrado: probar de afuera
+    "contragolpe": {"gambetear": 1.25, "tirar": 0.95}, # te deja la pelota: campo para encarar
+    "centros": {"pasar": 1.15, "gambetear": 1.1},      # volcado al ataque: defensa desordenada
+}
+PISTA_MOMENTO = {
+    "presion": "El rival juega adelantado: hay espacio a la espalda para un pase.",
+    "cuidar": "El rival está encerrado en su área: cuesta entrar, conviene probar el remate.",
+    "contragolpe": "El rival te regala la pelota y espera: hay campo para encarar.",
+    "centros": "El rival está volcado al ataque: su defensa quedó desordenada.",
+}
+# --- el pulso -------------------------------------------------------------------------
+# Qué atributos se miden según lo que elige el que ataca y lo que elige el que defiende
+# ("GK" = la media del arquero). La barra parte en a / (a + b).
+DUELO = {
+    ("tirar", "barrer"): ("SHO", "DEF"), ("tirar", "achicar"): ("SHO", "GK"), ("tirar", "cerrar"): ("SHO", "GK"),
+    ("pasar", "barrer"): ("PAS", "DEF"), ("pasar", "achicar"): ("PAS", "GK"), ("pasar", "cerrar"): ("PAS", "DEF"),
+    ("gambetear", "barrer"): ("DRI", "DEF"), ("gambetear", "achicar"): ("DRI", "GK"), ("gambetear", "cerrar"): ("DRI", "DEF"),
+}
+# Piedra, papel o tijera: quién parte con ventaja según la combinación
+VENTAJA_DUELO = {
+    ("tirar", "barrer"): 0.08,       # le pega antes de que llegue la barrida
+    ("tirar", "achicar"): -0.08,     # el arquero le cierra el ángulo
+    ("pasar", "achicar"): 0.10,      # el arquero salió: pase al compañero solo
+    ("pasar", "cerrar"): -0.08,      # cerraron las líneas de pase
+    ("gambetear", "barrer"): -0.08,  # la barrida se anticipa a la gambeta
+    ("gambetear", "cerrar"): 0.06,   # nadie le sale: tiene tiempo para encarar
+}
+# Calidad del remate si gana el que ataca / qué pasa si gana el que defiende
+# (None = se la quitan, "atajada" = la ataja, número = remata incómodo con esa calidad)
+RESULTADO_DUELO = {
+    ("tirar", "barrer"): (1.35, None), ("tirar", "achicar"): (1.6, "atajada"), ("tirar", "cerrar"): (1.1, 0.7),
+    ("pasar", "barrer"): (1.6, None), ("pasar", "achicar"): (2.1, None), ("pasar", "cerrar"): (1.2, None),
+    ("gambetear", "barrer"): (1.7, None), ("gambetear", "achicar"): (2.3, "atajada"), ("gambetear", "cerrar"): (1.35, 0.7),
+}
+RONDAS_PULSO = 3
+EMPUJE_PULSO = 0.11      # cuánto mueve la barra cada ronda (por diferencia de precisión)
+LEIDA_PULSO = 0.08       # repetir la jugada: el rival ya la espera (la barra parte peor)
+ATAQUES = ("tirar", "pasar", "gambetear")
+DEFENSAS = ("barrer", "achicar", "cerrar")
+# la máquina "lee" lo que repites: contra tu última jugada elige lo que mejor le sirve
+CONTRA_ATAQUE = {"gambetear": "barrer", "tirar": "achicar", "pasar": "cerrar"}
+CONTRA_DEFENSA = {"barrer": "tirar", "achicar": "pasar", "cerrar": "gambetear"}
+MAX_DUELOS_PVP = 3       # en vivo entre amigos: jugadas clave por partido (de los dos); más se hace eterno
+MAX_PARADAS_PVP = 1      # en vivo entre amigos: córners/tiros libres jugados como jugada clave
+PROB_DUELO_PVP = 0.33
+
+# --- pelota parada: córners y tiros libres también son jugadas clave ----------------
+MAX_PARADAS = 3          # por partido (de los dos equipos)
+PROB_CORNER = 0.3        # de cada córner, cuántos se juegan como jugada clave
+PROB_TIRO_LIBRE = 0.14   # de cada falta a favor (cerca del área), cuántas se juegan
+
+# --- tensión: empate o diferencia de un gol desde el minuto 80 --------------------
+MINUTO_DECISIVO = 80
+FACTOR_DECISIVO = 1.7    # más jugadas clave
+EMPUJE_DECISIVO = 1.5    # y cada toque pesa más
+
+# Cada clase de jugada: opciones de quien ataca y de quien defiende.
+# opción: (título, ícono, actor, atributo, detalle, gesto) — el actor es quién la ejecuta.
+# Gestos (en la pantalla): apuntar, companero, secuencia, rapida, reaccion, barra.
+CLASES = {
+    "jugada": {
+        "ataques": {
+            "tirar": ("Rematar", "🥅", "tirador", "SHO", "{tirador} le pega al arco", "apuntar"),
+            "pasar": ("Pasarla", "🤝", "tirador", "PAS", "Pase a {receptor}, que entra solo", "companero"),
+            "gambetear": ("Encarar", "🪄", "tirador", "DRI", "{tirador} encara a {defensor}", "secuencia"),
+        },
+        "defensas": {
+            "barrer": ("Ir al piso", "🦵", "defensor", "DEF", "{defensor} se tira a quitarla", "rapida",
+                       "Si pierde, queda solo frente al arco."),
+            "achicar": ("Salir a achicar", "🧤", "arquero", "GK", "{arquero} sale a taparlo", "reaccion",
+                        "Si pierde, el arco queda vacío."),
+            "cerrar": ("Cerrar el ángulo", "🧱", "defensor", "DEF", "Lo obligan a rematar incómodo", "barra",
+                       "Lo más seguro, pero igual remata."),
+        },
+    },
+    "corner": {
+        "ataques": {
+            "primer_palo": ("Al primer palo", "↗️", "receptor", "CAB", "{tirador} la mete fuerte para {receptor}", "apuntar"),
+            "segundo_palo": ("Al segundo palo", "🎯", "receptor", "CAB", "Centro pasado a la cabeza de {receptor}", "apuntar"),
+            "corto": ("Jugada corta", "🤝", "tirador", "PAS", "Lo juegan corto y buscan el pase atrás", "companero"),
+        },
+        "defensas": {
+            "marcar": ("Marca personal", "🫂", "defensor", "CAB", "{defensor} se pega a {receptor}", "rapida",
+                       "Si lo ganan por arriba, cabezazo limpio."),
+            "zona": ("Defensa en zona", "🧱", "defensor", "DEF", "Cada uno cuida su zona", "barra",
+                     "Segura, pero el primer palo queda libre."),
+            "salir": ("El arquero sale", "🧤", "arquero", "GK", "{arquero} sale a cortar el centro", "reaccion",
+                      "Si no llega, el arco queda vacío."),
+        },
+    },
+    "tiro_libre": {
+        "ataques": {
+            "directo": ("Directo al arco", "🎯", "tirador", "SHO", "{tirador} le pega por arriba de la barrera", "apuntar"),
+            "centro": ("Centro al área", "↗️", "tirador", "PAS", "Centro a la cabeza de {receptor}", "apuntar"),
+            "ensayada": ("Jugada ensayada", "🧠", "tirador", "PAS", "La tocan al costado para {receptor}", "companero"),
+        },
+        "defensas": {
+            "barrera": ("Barrera grande", "🧍", "arquero", "GK", "Cinco en la barrera y {arquero} cubre su palo", "reaccion",
+                        "Firme contra el remate, pero quedan pocos en el área."),
+            "saltar": ("La barrera salta", "⬆️", "defensor", "DEF", "La barrera salta a bloquear", "rapida",
+                       "Tapa el remate por arriba; por abajo pasa."),
+            "marcar": ("Marcar en el área", "🫂", "defensor", "CAB", "Todos marcan en el área", "barra",
+                       "Corta los centros, pero deja más espacio para el remate."),
+        },
+    },
+}
+# Atributo de quien defiende según el duelo (cuando no es el suyo propio). Sin entrada: el de su opción.
+DUELO_PARADA = {
+    ("corner", "corto", "marcar"): "DEF",
+}
+# Piedra, papel o tijera de la pelota parada
+VENTAJA_PARADA = {
+    ("corner", "primer_palo", "zona"): 0.09, ("corner", "primer_palo", "marcar"): -0.06,
+    ("corner", "segundo_palo", "salir"): 0.09, ("corner", "segundo_palo", "zona"): -0.06,
+    ("corner", "corto", "marcar"): 0.09, ("corner", "corto", "salir"): -0.06,
+    ("tiro_libre", "directo", "marcar"): 0.09, ("tiro_libre", "directo", "barrera"): -0.06,
+    ("tiro_libre", "centro", "barrera"): 0.09, ("tiro_libre", "centro", "marcar"): -0.06,
+    ("tiro_libre", "ensayada", "saltar"): 0.09, ("tiro_libre", "ensayada", "barrera"): -0.03,
+}
+# Si gana quien ataca: (quién remata, calidad, tipo de jugada). Si gana quien defiende: None (la despejan),
+# "atajada" o un número (remata incómodo con esa calidad).
+RESULTADO_PARADA = {
+    "corner": {"primer_palo": (("receptor", 1.5, "centro_cabeza"), None), "segundo_palo": (("receptor", 1.55, "centro_cabeza"), None),
+               "corto": (("receptor", 1.25, "pase_filtrado"), 0.6)},
+    "tiro_libre": {"directo": (("tirador", 1.25, "lejano"), "atajada"), "centro": (("receptor", 1.5, "centro_cabeza"), None),
+                   "ensayada": (("receptor", 1.35, "pase_filtrado"), None)},
+}
+MAX_DEFENSAS = 3             # momentos defensivos por partido (te atacan y decides)
+PROB_DEFENSA = 0.3
+
+
+def precisiones(valores, defecto: float = 0.1) -> list[float]:
+    """Los toques del pulso (0 a 1 cada uno); los que faltan cuentan como mal hechos."""
+    salida = []
+    for i in range(RONDAS_PULSO):
+        try:
+            salida.append(min(1.0, max(0.0, float((valores or [])[i]))))
+        except (TypeError, ValueError, IndexError):
+            salida.append(defecto)
+    return salida
+
+
+def zona(a: float, b: float = 65, base: float = 0.10) -> float:
+    """Ancho de la zona verde de la barra (0.07 a 0.28): más grande si tu jugador es mejor."""
+    return round(min(0.28, max(0.07, base + (a - b) * 0.005)), 3)
 
 
 def _poisson(lam: float, tope: int = 9) -> list[float]:
@@ -107,7 +263,7 @@ class Jugador:
     estado: str = "disponible"
     nivel_mejora: int = 1
     id: int | None = None  # identificador en la base de datos (para aplicar lesiones y tarjetas)
-    quimica: float = 1.0   # multiplicador por química con los compañeros (0.97 a 1.03)
+    quimica: float = 1.0   # multiplicador por química con los compañeros (0.96 a 1.05)
 
     @property
     def nombre(self) -> str:
@@ -180,6 +336,8 @@ class Equipo:
     suplentes: list[Jugador] = field(default_factory=list)
     mentalidad: str = "equilibrada"
     tactica: str = "normal"
+    # química del once armado por un usuario: {"equipo": 0..100, "socios": {nombre: [enlaces verdes]}}; None = bot
+    quimica: dict | None = None
 
     def validar(self):
         if self.mentalidad not in MENTALIDADES:
@@ -240,6 +398,7 @@ class Resultado:
     tarjetas: list[dict]
     tipo: str
     razones: list = field(default_factory=lambda: [[], []])  # por qué se ganó o perdió, por equipo
+    quimica: list = field(default_factory=lambda: [None, None])  # Equipo.quimica de cada lado
 
     @property
     def ganador(self) -> int:
@@ -255,6 +414,8 @@ class Simulacion:
         local.validar()
         visita.validar()
         self.rng = random.Random(semilla)
+        self.semilla = semilla
+        self.duelos = False          # en vivo entre amigos: los dos equipos deciden (pulsos de los dos lados)
         self.tipo = tipo
         self.equipos = (local, visita)
         self.cancha = [
@@ -281,6 +442,10 @@ class Simulacion:
         self.momentos: list[dict] = []                      # momentos clave ya resueltos
         self._n_momentos = 0
         self._ultimo_momento = -99
+        self._n_defensas = 0
+        self._n_paradas = 0
+        self._ultima_eleccion: dict[tuple, str] = {}   # (clase, rol) -> última elección: para "leer" al que repite
+        self._cambio_tactica_min = [0, 0]                    # minuto absoluto del último cambio de táctica
         self.cambios_tactica: list[dict] = []
         self.fuerza_inicial = [1.0, 1.0]
 
@@ -369,18 +534,67 @@ class Simulacion:
         jugada = self._tipo_jugada(tirador, asistente)
         if cabeza and asistente and jugada not in ("centro", "centro_cabeza"):
             jugada = "centro_cabeza" if tirador.jugador.carta.stats.get("PHY", 60) >= 70 else "centro"
-        ahora = (self.tiempo - 1) * 50 + self.minuto
-        if (eq == self.interactivo and self._n_momentos < MAX_MOMENTOS
-                and ahora - self._ultimo_momento >= SEPARACION_MOMENTOS and self.rng.random() < PROB_MOMENTO):
+        ahora = self._ahora()
+        decisivo = self.decisivo()
+        extra = FACTOR_DECISIVO if decisivo else 1.0
+        tope = (1 if self.duelos else 2) if decisivo else 0
+        if self.duelos:   # entre amigos: cualquiera de los dos puede tener la jugada clave
+            if (self._n_momentos < MAX_DUELOS_PVP + tope and ahora - self._ultimo_momento >= SEPARACION_MOMENTOS
+                    and self.rng.random() < PROB_DUELO_PVP * extra):
+                self._n_momentos += 1
+                self._ultimo_momento = ahora
+                ref = self._pendiente(("duelo", eq, tirador, asistente, jugada, "jugada"))
+                self._evento("momento", eq, tirador.nombre)
+                self._pausas.append({"tipo": "duelo", "clase": "jugada", "ref": ref, "ataca": eq, "jugador": tirador.nombre,
+                                     "decisivo": decisivo, "minuto": self.minuto, "tiempo": self.tiempo, "segundos": 12})
+                return True
+            self._tiro(eq, tirador, asistente, jugada=jugada)
+            return False
+        if (eq == self.interactivo and self._n_momentos < MAX_MOMENTOS + tope
+                and ahora - self._ultimo_momento >= SEPARACION_MOMENTOS and self.rng.random() < PROB_MOMENTO * extra):
             self._n_momentos += 1
             self._ultimo_momento = ahora
-            ref = self._pendiente(("ocasion", eq, tirador, asistente, jugada))
+            ref = self._pendiente(("duelo", eq, tirador, asistente, jugada, "jugada"))
             self._evento("momento", eq, tirador.nombre, asistente=asistente.nombre if asistente else "")
-            self._pausas.append({"tipo": "ocasion", "ref": ref, "jugador": tirador.nombre, "minuto": self.minuto,
-                                 "tiempo": self.tiempo, "segundos": 8})
+            self._pausas.append({"tipo": "ocasion", "clase": "jugada", "ref": ref, "ataca": eq, "jugador": tirador.nombre,
+                                 "decisivo": decisivo, "minuto": self.minuto, "tiempo": self.tiempo, "segundos": 12})
+            return True
+        # te atacan: a veces decides cómo defender
+        if (self.interactivo is not None and eq != self.interactivo and self._n_defensas < MAX_DEFENSAS + tope // 2
+                and ahora - self._ultimo_momento >= SEPARACION_MOMENTOS and self.rng.random() < PROB_DEFENSA * extra):
+            self._n_defensas += 1
+            self._ultimo_momento = ahora
+            ref = self._pendiente(("duelo", eq, tirador, asistente, jugada, "jugada"))
+            self._evento("peligro", eq, tirador.nombre)
+            self._pausas.append({"tipo": "defensa", "clase": "jugada", "ref": ref, "ataca": eq, "jugador": tirador.nombre,
+                                 "decisivo": decisivo, "minuto": self.minuto, "tiempo": self.tiempo, "segundos": 12})
             return True
         self._tiro(eq, tirador, asistente, jugada=jugada)
         return False
+
+    def decisivo(self) -> bool:
+        """Desde el minuto 80 con el partido abierto (empate o un gol de diferencia)."""
+        return self.tiempo == 2 and self.minuto >= MINUTO_DECISIVO and abs(self.goles[0] - self.goles[1]) <= 1
+
+    def _pelota_parada(self, eq: int, clase: str, prob: float):
+        """Córner o tiro libre a favor de `eq`: a veces se juega como jugada clave (pulso)."""
+        if self.interactivo is None and not self.duelos:
+            return
+        if self._n_paradas >= (MAX_PARADAS_PVP if self.duelos else MAX_PARADAS) or self.rng.random() >= prob * (FACTOR_DECISIVO if self.decisivo() else 1):
+            return
+        activos = [j for j in self._activos(eq) if not j.es_arquero]
+        if len(activos) < 2:
+            return
+        if clase == "corner":
+            tirador = max(activos, key=lambda j: j.stat("PAS"))
+        else:
+            tirador = max(activos, key=lambda j: j.stat("SHO") + j.stat("PAS") * 0.5)
+        self._n_paradas += 1
+        ref = self._pendiente(("duelo", eq, tirador, None, "lejano", clase))
+        self._evento(clase, eq, tirador.nombre)
+        tipo = "duelo" if self.duelos else clase
+        self._pausas.append({"tipo": tipo, "clase": clase, "ref": ref, "ataca": eq, "jugador": tirador.nombre,
+                             "decisivo": self.decisivo(), "minuto": self.minuto, "tiempo": self.tiempo, "segundos": 12})
 
     def _pendiente(self, datos: tuple) -> int:
         self._n_pend += 1
@@ -446,6 +660,8 @@ class Simulacion:
                 self.est[eq]["corners"] += 1
             self._evento("desviado", eq, tirador.nombre, corner=resultado == "corner", jugada=jugada, penal=penal,
                          asistente=asis, **extra)
+            if resultado == "corner":
+                self._pelota_parada(eq, "corner", PROB_CORNER)
             return
         self.est[eq]["a_puerta"] += 1
         tirador.a_puerta += 1
@@ -500,18 +716,22 @@ class Simulacion:
         else:
             self._evento("falta", infractor_eq, infractor.nombre)
 
+        # tiro libre peligroso para el que tenía la pelota
+        if infractor_eq != eq_posesion:
+            self._pelota_parada(victima_eq, "tiro_libre", PROB_TIRO_LIBRE)
         # penal: falta del equipo que defiende, a veces dentro del área
         if infractor_eq != eq_posesion and self.rng.random() < 0.016:
             atacantes = [j for j in self._activos(victima_eq) if not j.es_arquero]
             if atacantes:
                 pateador = max(atacantes, key=lambda j: j.stat("SHO"))
                 self._evento("penal", victima_eq, pateador.nombre)
-                if self.interactivo is not None:
+                if self.interactivo is not None or self.duelos:
                     arquero = self.arquero(infractor_eq)
                     ref = self._pendiente(("penal", victima_eq, pateador))
-                    self._pausas.append({"tipo": "penal", "ref": ref, "patea": victima_eq == self.interactivo,
+                    self._pausas.append({"tipo": "penal", "ref": ref, "ataca": victima_eq, "decisivo": self.decisivo(),
+                                         "patea": victima_eq == self.interactivo,
                                          "pateador": pateador.nombre, "arquero": arquero.nombre if arquero else "",
-                                         "minuto": self.minuto, "tiempo": self.tiempo, "segundos": 7})
+                                         "minuto": self.minuto, "tiempo": self.tiempo, "segundos": 12})
                 else:
                     self._tiro(victima_eq, pateador, None, penal=True)
 
@@ -557,7 +777,7 @@ class Simulacion:
         eq = 0 if self.rng.random() < c0 / (c0 + c1) else 1
         self.est[eq]["posesion"] += 1
 
-        rel = self.ataque(eq) / max(self.defensa(1 - eq), 1)
+        rel = self.ataque(eq) / max(self.defensa(1 - eq), 1) * self.duelo_tactico(eq)
         p_ocasion = min(0.6, max(0.06, 0.27 * rel ** 1.25))
         esperando = False
         if self.rng.random() < p_ocasion:
@@ -573,16 +793,64 @@ class Simulacion:
         pg, pe = self.prob_victoria()
         self.posesion_min.append((self.tiempo, self.minuto, eq, pg, pe))
 
+    def duelo_tactico(self, eq: int) -> float:
+        """Multiplicador de llegadas de `eq` según las tácticas de ambos (contras)."""
+        mia, suya = self.equipos[eq].tactica, self.equipos[1 - eq].tactica
+        if VENCE.get(mia) == suya:
+            return VENTAJA_TACTICA
+        if VENCE.get(suya) == mia:
+            return DESVENTAJA_TACTICA
+        return 1.0
+
+    def _ahora(self) -> int:
+        return (self.tiempo - 1) * 50 + self.minuto
+
+    def tactica_leida(self, eq: int) -> str | None:
+        """La táctica de `eq` si ya pasó el tiempo para leerla en la cancha (None: todavía no se nota)."""
+        if self._ahora() - self._cambio_tactica_min[eq] < MINUTOS_LECTURA:
+            return None
+        return self.equipos[eq].tactica
+
+    def _tactica_inicial(self, eq: int):
+        """El bot sale con la táctica que le acomoda a su plantel."""
+        js = self._activos(eq)
+        dels = [j for j in js if j.linea == "DEL"] or js
+        meds = [j for j in js if j.linea == "MED"] or js
+        prom = lambda grupo, k: sum(j.stat(k) for j in grupo) / len(grupo)
+        if max(j.jugador.carta.stats.get("PHY", 60) for j in dels) >= 78 and any(j.puesto in BANDAS for j in js):
+            t = "centros"
+        elif prom(dels, "PAC") >= 80:
+            t = "contragolpe"
+        elif (prom(meds, "PAS") + prom(meds, "DRI")) / 2 >= 74:
+            t = "presion"
+        else:
+            t = "normal"
+        self.equipos[eq].tactica = t
+
     def _tactica_bot(self, eq: int):
-        """Los bots también ajustan: si ganan se cierran, si pierden van a buscarlo."""
-        if eq == self.interactivo or self.tiempo != 2 or self.minuto not in (60, 75):
+        """Los bots también juegan: si ganan se cierran, si pierden van a buscarlo, y si les
+        aciertas la contra (o los lees), buscan contrarrestarte después de un rato."""
+        if eq == self.interactivo or self.duelos:
             return
-        dif = self.goles[eq] - self.goles[1 - eq]
-        self._poner_tactica(eq, "cuidar" if dif >= 1 else "presion" if dif < 0 else "normal")
+        if self.tiempo == 2 and self.minuto in (60, 75):
+            dif = self.goles[eq] - self.goles[1 - eq]
+            if dif >= 1 or dif < 0:
+                self._poner_tactica(eq, "cuidar" if dif >= 1 else "presion")
+                return
+        ahora = self._ahora()
+        if ahora % 12 or ahora < 15 or ahora - self._cambio_tactica_min[eq] < 10:
+            return
+        rival = self.equipos[1 - eq].tactica
+        me_gana = VENCE.get(rival) == self.equipos[eq].tactica
+        # ¿quién le gana a lo que hace el rival?
+        contra = next((k for k, v in VENCE.items() if v == rival), None)
+        if contra and (me_gana and self.rng.random() < 0.55 or not me_gana and rival != "normal" and self.rng.random() < 0.2):
+            self._poner_tactica(eq, contra)
 
     def _poner_tactica(self, eq: int, tactica: str):
         if tactica not in TACTICAS or self.equipos[eq].tactica == tactica:
             return
+        self._cambio_tactica_min[eq] = self._ahora()
         self.equipos[eq].tactica = tactica
         self.cambios_tactica.append({"equipo": eq, "tactica": tactica, "tiempo": self.tiempo, "minuto": self.minuto,
                                      "marcador": list(self.goles)})
@@ -592,7 +860,7 @@ class Simulacion:
         """Goles esperados por minuto del equipo, con lo que hay ahora en cancha."""
         c0, c1 = self.control(eq) ** 3, self.control(1 - eq) ** 3
         pos = c0 / max(c0 + c1, 1e-9)
-        rel = self.ataque(eq) / max(self.defensa(1 - eq), 1)
+        rel = self.ataque(eq) / max(self.defensa(1 - eq), 1) * self.duelo_tactico(eq)
         p_oc = min(0.6, max(0.06, 0.27 * rel ** 1.25))
         tiradores = sorted((j for j in self._activos(eq) if not j.es_arquero), key=lambda j: -j.stat("SHO"))[:4]
         if not tiradores:
@@ -618,8 +886,14 @@ class Simulacion:
         Resultado viene en StopIteration.value. Sin interactivo no hay pausas.
         """
         self.interactivo = interactivo
+        for e in (0, 1):
+            if e != interactivo and not self.duelos and self.equipos[e].tactica == "normal":
+                self._tactica_inicial(e)
         self.fuerza_inicial = [self.control(e) + self.ataque(e) + self.defensa(e) for e in (0, 1)]
         self._evento("inicio")
+        for e in (0, 1):   # cómo sale parado el bot (se nota en la cancha, no te lo dicen)
+            if e != interactivo and self.equipos[e].tactica != "normal":
+                self._evento("tactica", e, "", tactica=self.equipos[e].tactica)
         for tiempo, fin in ((1, 45), (2, 90)):
             self.tiempo = tiempo
             adicion = self.rng.randint(1, 4) if tiempo == 1 else self.rng.randint(2, 6)
@@ -647,12 +921,12 @@ class Simulacion:
         """Aplica lo que pediste en vivo al terminar este minuto (táctica o pausa para cambios)."""
         clave = (self.tiempo, self.minuto)
         acciones = self.intervenciones.get(clave)
-        if not acciones or self.interactivo is None:
+        if not acciones or (self.interactivo is None and not self.duelos):
             return
         self.indice_intervencion[clave] = len(self.eventos)
         for a in acciones:
             if a.get("tipo") == "tactica":
-                self._poner_tactica(self.interactivo, a.get("valor"))
+                self._poner_tactica(a.get("eq", self.interactivo), a.get("valor"))
             elif a.get("tipo") == "pausa":
                 self._pausas.append({"tipo": "pausa", "minuto": self.minuto, "tiempo": self.tiempo, "segundos": 30})
 
@@ -664,8 +938,8 @@ class Simulacion:
             decision = (yield pausa) or {}
             if pausa["tipo"] == "roja":
                 self._aplicar_roja(self.interactivo, pausa, decision)
-            elif pausa["tipo"] == "ocasion":
-                self._resolver_ocasion(pausa, decision)
+            elif pausa["tipo"] in ("ocasion", "defensa", "duelo", "corner", "tiro_libre"):
+                self._resolver_duelo(pausa, decision)
             elif pausa["tipo"] == "penal":
                 self._resolver_penal(pausa, decision)
             else:
@@ -685,7 +959,7 @@ class Simulacion:
         """Jugadores en cancha y en la banca (para la interfaz de cambios)."""
         def ficha(j: Jugador) -> dict:
             c = j.carta
-            return {"id": j.id, "nombre": j.nombre, "pos": c.posicion, "ovr": c.ovr, "nivel": c.nivel,
+            return {"id": j.id, "nombre": j.nombre, "completo": c.nombre, "pos": c.posicion, "ovr": c.ovr, "nivel": c.nivel,
                     "club": c.club, "nacion": c.nacion}
         return {
             "cancha": [{**ficha(e.jugador), "puesto": e.puesto, "slot": e.slot, "energia": round(e.energia),
@@ -720,78 +994,282 @@ class Simulacion:
     def _p_regate(tirador: EnCancha, defensor: EnCancha) -> float:
         return min(0.8, max(0.2, 0.45 + (tirador.stat("DRI") - defensor.stat("DEF")) * 0.015))
 
-    def opciones_ocasion(self, pausa: dict) -> dict:
-        """Las 3 jugadas posibles con su probabilidad real de terminar en gol."""
-        _, eq, tirador, asistente, _ = self._pendientes[pausa["ref"]]
-        receptor, defensor = self._receptor(eq, tirador), self._defensor(eq)
-        a, b, arquero = self._probs_tiro(eq, tirador, CALIDAD_MOMENTO["tirar"])
-        ops = [{"clave": "tirar", "titulo": "Rematar", "detalle": f"{tirador.nombre} le pega al arco",
-                "prob": round(100 * a * b)}]
-        if receptor:
-            pase = self._p_pase(tirador)
-            a2, b2, _ = self._probs_tiro(eq, receptor, CALIDAD_MOMENTO["pasar"])
-            ops.append({"clave": "pasar", "titulo": "Pasarla", "detalle": f"Pase a {receptor.nombre}, que entra más solo",
-                        "exito": round(100 * pase), "prob": round(100 * pase * a2 * b2)})
-        if defensor:
-            regate = self._p_regate(tirador, defensor)
-            a3, b3, _ = self._probs_tiro(eq, tirador, CALIDAD_MOMENTO["gambetear"])
-            ops.append({"clave": "gambetear", "titulo": "Encarar", "detalle": f"{tirador.nombre} encara a {defensor.nombre}",
-                        "exito": round(100 * regate), "prob": round(100 * regate * a3 * b3)})
-        c = tirador.jugador.carta
-        return {"tirador": {"id": tirador.jugador.id, "nombre": tirador.nombre, "pos": c.posicion, "ovr": c.ovr,
-                            "nivel": c.nivel, "club": c.club},
-                "arquero": arquero.nombre if arquero else "", "opciones": ops}
+    # --- el pulso: piezas comunes --------------------------------------------
 
-    def _resolver_ocasion(self, pausa: dict, decision: dict):
-        _, eq, tirador, asistente, jugada = self._pendientes.pop(pausa["ref"])
-        eleccion = decision.get("eleccion") if decision.get("eleccion") in CALIDAD_MOMENTO else "tirar"
-        if not tirador.activo:
-            return
-        antes, exito = self.goles[eq], True
-        receptor, defensor = self._receptor(eq, tirador), self._defensor(eq)
-        if eleccion == "pasar" and receptor:
-            exito = self.rng.random() < self._p_pase(tirador)
-            if exito:
-                self._tiro(eq, receptor, tirador, jugada="pase_filtrado", calidad=CALIDAD_MOMENTO["pasar"])
-            else:
-                self._evento("perdida", eq, tirador.nombre, otro=receptor.nombre, como="pase")
-        elif eleccion == "gambetear" and defensor:
-            exito = self.rng.random() < self._p_regate(tirador, defensor)
-            if exito:
-                self._tiro(eq, tirador, None, jugada="individual", calidad=CALIDAD_MOMENTO["gambetear"])
-            else:
-                self._evento("perdida", eq, tirador.nombre, otro=defensor.nombre, como="gambeta")
+    def _rng_pausa(self, ref: int, *extra) -> random.Random:
+        """Azar propio de cada jugada clave (no depende de lo que elijas: no se puede "tantear")."""
+        return random.Random(f"{self.semilla}-pulso-{ref}-{'-'.join(map(str, extra))}")
+
+    def _actores(self, pausa: dict) -> dict:
+        _, eq, tirador, asistente, jugada, clase = self._pendientes[pausa["ref"]]
+        rivales = [j for j in self._activos(1 - eq) if not j.es_arquero]
+        if clase == "jugada":
+            receptor, defensor = self._receptor(eq, tirador), self._defensor(eq)
+        else:   # pelota parada: cabeceador propio y el mejor marcador rival
+            otros = [j for j in self._activos(eq) if j is not tirador and not j.es_arquero]
+            receptor = max(otros, key=lambda j: j.stat("PHY") + j.stat("SHO") * 0.5, default=None)
+            defensor = max(rivales, key=lambda j: j.stat("DEF") + j.stat("PHY") * 0.5, default=None)
+        return {"eq": eq, "clase": clase, "tirador": tirador, "asistente": asistente, "jugada": jugada,
+                "receptor": receptor, "defensor": defensor, "arquero": self.arquero(1 - eq)}
+
+    @staticmethod
+    def _valor(j: EnCancha | None, clave: str) -> float:
+        if j is None:
+            return 40.0
+        if clave == "GK":
+            return j.stat("OVR")
+        if clave == "CAB":   # juego aéreo
+            return 0.7 * j.stat("PHY") + 0.3 * j.stat("SHO" if j.linea != "DEF" else "DEF")
+        return j.stat(clave)
+
+    ETIQUETA = {"SHO": "TIR", "PAS": "PAS", "DRI": "REG", "DEF": "DEF", "GK": "🧤", "CAB": "CAB"}
+
+    def _texto(self, plantilla: str, a: dict) -> str:
+        nombres = {k: (a[k].nombre if a.get(k) else "un compañero") for k in ("tirador", "receptor", "defensor", "arquero")}
+        return plantilla.format(**nombres)
+
+    def opciones_rol(self, pausa: dict, rol: str) -> list[dict]:
+        """Opciones de quien ataca (rol "ataque") o defiende ("defensa"), con el atributo de quien la ejecuta."""
+        a = self._actores(pausa)
+        clase = a["clase"]
+        ultima = self._ultima_eleccion.get((clase, rol))
+        ops = []
+        for clave, spec in CLASES[clase]["ataques" if rol == "ataque" else "defensas"].items():
+            titulo, ico, actor, stat, detalle, gesto = spec[:6]
+            if a.get(actor) is None:
+                continue
+            ops.append({"clave": clave, "titulo": titulo, "ico": ico, "detalle": self._texto(detalle, a),
+                        "stat": [self.ETIQUETA[stat], round(self._valor(a[actor], stat))], "leida": ultima == clave,
+                        "riesgo": spec[6] if len(spec) > 6 else "", "gesto": gesto})
+        return ops
+
+    def opciones_ataque(self, pausa: dict) -> list[dict]:
+        return self.opciones_rol(pausa, "ataque")
+
+    def opciones_defensiva(self, pausa: dict) -> list[dict]:
+        return self.opciones_rol(pausa, "defensa")
+
+    def _ficha_tirador(self, t: EnCancha) -> dict:
+        c = t.jugador.carta
+        return {"id": t.jugador.id, "nombre": t.nombre, "pos": c.posicion, "ovr": c.ovr, "nivel": c.nivel, "club": c.club}
+
+    def opciones_pausa(self, pausa: dict, rol: str) -> dict:
+        """Todo lo que ve quien decide: su jugador, sus opciones y (si ya lo leyó) cómo está parado el rival."""
+        a = self._actores(pausa)
+        pista = ""
+        if rol == "ataque" and a["clase"] == "jugada":
+            pista = PISTA_MOMENTO.get(self.tactica_leida(1 - a["eq"]), "")
+        elif rol == "defensa" and a["clase"] == "jugada":
+            pista = {"contragolpe": "Vienen de contragolpe, a toda velocidad: al piso es arriesgado.",
+                     "centros": "Viene por arriba: salir a achicar sirve menos."}.get(self.tactica_leida(a["eq"]), "")
+        return {"tirador": self._ficha_tirador(a["tirador"]), "arquero": a["arquero"].nombre if a["arquero"] else "",
+                "receptor": a["receptor"].nombre if a["receptor"] else "", "clase": a["clase"], "rol": rol,
+                "opciones": self.opciones_rol(pausa, rol), "pista": pista}
+
+    def opciones_ocasion(self, pausa: dict) -> dict:
+        return self.opciones_pausa(pausa, "ataque")
+
+    def opciones_defensa(self, pausa: dict) -> dict:
+        return self.opciones_pausa(pausa, "defensa")
+
+    def eleccion_ia(self, pausa: dict, rol: str) -> str:
+        """Lo que elige la máquina (rol "ataque" o "defensa"): según sus jugadores y lo que vienes
+        repitiendo (te lee: va a lo que mejor le sirve contra tu última elección). Determinístico."""
+        a = self._actores(pausa)
+        clase = a["clase"]
+        rng = self._rng_pausa(pausa["ref"], "ia", rol)
+        ops = self.opciones_rol(pausa, rol)
+        pesos = {o["clave"]: (o["stat"][1] / 70) ** 2 for o in ops}
+        otro = "defensa" if rol == "ataque" else "ataque"
+        tuya = self._ultima_eleccion.get((clase, otro))
+        if tuya:
+            # la opción que mejor le va contra lo que repetiste
+            mejor = max(pesos, key=lambda k: self._ventaja(clase, *((k, tuya) if rol == "ataque" else (tuya, k)))
+                        * (1 if rol == "ataque" else -1))
+            pesos[mejor] *= 2.2
+        claves = list(pesos)
+        return rng.choices(claves, weights=[pesos[k] for k in claves])[0]
+
+    def precisiones_ia(self, pausa: dict, rol: str, stat: float) -> list[float]:
+        """Los toques de la máquina: mejores cuanto mejor es su jugador en ese duelo."""
+        rng = self._rng_pausa(pausa["ref"], "toques", rol)
+        media = 0.42 + (stat - 70) * 0.012
+        return [round(min(1.0, max(0.0, rng.gauss(media, 0.2))), 2) for _ in range(RONDAS_PULSO)]
+
+    @staticmethod
+    def _ventaja(clase: str, ataque: str, defensa: str) -> float:
+        if clase == "jugada":
+            return VENTAJA_DUELO.get((ataque, defensa), 0)
+        return VENTAJA_PARADA.get((clase, ataque, defensa), 0)
+
+    def preparar_duelo(self, pausa: dict, ataque: str, defensa: str) -> dict:
+        """El duelo ya elegido: quién se mide con quién, dónde parte la barra, cuánto empuja cada
+        toque, el gesto de cada uno y el ancho de su zona."""
+        a = self._actores(pausa)
+        clase, spec = a["clase"], CLASES[a["clase"]]
+        ataques, defensas = self.opciones_rol(pausa, "ataque"), self.opciones_rol(pausa, "defensa")
+        ataque = ataque if ataque in {o["clave"] for o in ataques} else ataques[0]["clave"]
+        defensa = defensa if defensa in {o["clave"] for o in defensas} else defensas[-1]["clave"]
+        _, _, actor_a, stat_a, _, gesto_a = spec["ataques"][ataque][:6]
+        _, _, actor_d, stat_d, _, gesto_d = spec["defensas"][defensa][:6]
+        if clase == "jugada":
+            stat_a, stat_d = DUELO[(ataque, defensa)]
+            actor_d = "arquero" if stat_d == "GK" else "defensor"
         else:
-            eleccion = "tirar"
-            self._tiro(eq, tirador, asistente, jugada=jugada, calidad=CALIDAD_MOMENTO["tirar"])
-        self.momentos.append({"eleccion": eleccion, "exito": exito, "gol": self.goles[eq] > antes,
+            stat_d = DUELO_PARADA.get((clase, ataque, defensa), stat_d)
+        atacante, defiende = a[actor_a], a[actor_d]
+        va, vd = self._valor(atacante, stat_a), self._valor(defiende, stat_d)
+        inicio = va / (va + vd) + self._ventaja(clase, ataque, defensa)
+        if clase == "jugada":
+            inicio += (self._ajuste_momento(a["eq"], ataque) - 1) * 0.4      # cómo está parado el que defiende
+        if self._ultima_eleccion.get((clase, "ataque")) == ataque:
+            inicio -= LEIDA_PULSO
+        if self._ultima_eleccion.get((clase, "defensa")) == defensa and defensa not in ("cerrar", "zona"):
+            inicio += LEIDA_PULSO
+        o_a = next(o for o in ataques if o["clave"] == ataque)
+        o_d = next(o for o in defensas if o["clave"] == defensa)
+        return {"clase": clase, "ataque": ataque, "defensa": defensa, "ataca": a["eq"],
+                "nombre_ataque": f"{o_a['ico']} {o_a['titulo']}", "nombre_defensa": f"{o_d['ico']} {o_d['titulo']}",
+                "gesto_ataque": gesto_a, "gesto_defensa": gesto_d, "decisivo": bool(pausa.get("decisivo")),
+                "atacante": {"nombre": atacante.nombre, "stat": self.ETIQUETA[stat_a], "valor": round(va)},
+                "defensor": {"nombre": defiende.nombre if defiende else "", "stat": self.ETIQUETA[stat_d], "valor": round(vd)},
+                "inicio": round(min(0.8, max(0.2, inicio)), 3),
+                "zona_ataque": zona(va, vd - 5), "zona_defensa": zona(vd, va - 5),
+                "rondas": RONDAS_PULSO, "empuje": round(EMPUJE_PULSO * (EMPUJE_DECISIVO if pausa.get("decisivo") else 1), 3)}
+
+    @staticmethod
+    def final_pulso(inicio: float, prec_ataque: list[float], prec_defensa: list[float], empuje: float = EMPUJE_PULSO) -> float:
+        barra = inicio
+        for pa, pd in zip(prec_ataque, prec_defensa):
+            barra = min(1.0, max(0.0, barra + empuje * (pa - pd)))
+        return barra
+
+    def _ajuste_momento(self, eq: int, eleccion: str) -> float:
+        """Cuánto mejor (o peor) sale esa jugada según cómo está parado el rival."""
+        return AJUSTE_MOMENTO.get(self.equipos[1 - eq].tactica, {}).get(eleccion, 1.0)
+
+    def _decision_duelo(self, pausa: dict, decision: dict) -> tuple[str, str, list, list]:
+        """(ataque, defensa, toques del que ataca, toques del que defiende) según quién juega cada lado."""
+        eq = self._pendientes[pausa["ref"]][1]
+        if self.duelos:   # entre amigos: vienen los dos lados
+            return (decision.get("ataque"), decision.get("defensa"),
+                    precisiones(decision.get("prec_ataque")), precisiones(decision.get("prec_defensa")))
+        if eq == self.interactivo:   # atacas tú, defiende la máquina
+            prep = self.preparar_duelo(pausa, decision.get("eleccion"), self.eleccion_ia(pausa, "defensa"))
+            return (prep["ataque"], prep["defensa"], precisiones(decision.get("precisiones")),
+                    self.precisiones_ia(pausa, "defensa", prep["defensor"]["valor"]))
+        prep = self.preparar_duelo(pausa, self.eleccion_ia(pausa, "ataque"), decision.get("eleccion"))
+        return (prep["ataque"], prep["defensa"], self.precisiones_ia(pausa, "ataque", prep["atacante"]["valor"]),
+                precisiones(decision.get("precisiones")))
+
+    def _resolver_duelo(self, pausa: dict, decision: dict):
+        a = self._actores(pausa)
+        eq, clase, tirador, asistente, jugada = a["eq"], a["clase"], a["tirador"], a["asistente"], a["jugada"]
+        if not tirador.activo:
+            self._pendientes.pop(pausa["ref"])
+            return
+        ataque, defensa, pa, pd = self._decision_duelo(pausa, decision)
+        prep = self.preparar_duelo(pausa, ataque, defensa)
+        self._pendientes.pop(pausa["ref"])
+        ataque, defensa = prep["ataque"], prep["defensa"]
+        barra = self.final_pulso(prep["inicio"], pa, pd, prep["empuje"])
+        gana_ataque = barra >= 0.5
+        self._ultima_eleccion[(clase, "ataque")], self._ultima_eleccion[(clase, "defensa")] = ataque, defensa
+        self._evento("pulso", eq, tirador.nombre, ataque=ataque, defensa=defensa, gana=gana_ataque, clase=clase,
+                     barra=round(barra, 2), otro=prep["defensor"]["nombre"], decisivo=prep["decisivo"])
+        antes = self.goles[eq]
+        receptor, defensor, arquero = a["receptor"], a["defensor"], a["arquero"]
+        if clase == "jugada":
+            si_gana, si_pierde = RESULTADO_DUELO[(ataque, defensa)]
+            quien = "receptor" if ataque == "pasar" and receptor else "tirador"
+            tipo = "pase_filtrado" if quien == "receptor" else ("individual" if ataque == "gambetear" else jugada)
+        else:
+            (quien, si_gana, tipo), si_pierde = RESULTADO_PARADA[clase][ataque]
+            if quien == "receptor" and not receptor:
+                quien = "tirador"
+        if gana_ataque:
+            rematador = a[quien]
+            pasador = tirador if quien == "receptor" else (asistente if ataque == "tirar" else None)
+            self._tiro(eq, rematador, pasador, jugada=tipo, calidad=si_gana)
+        elif si_pierde == "atajada":
+            self._registrar_tiro(eq, tirador, asistente, "atajada", jugada=tipo)
+        elif si_pierde is None:
+            quita = arquero if defensa in ("achicar", "salir", "barrera") else defensor
+            if clase != "jugada":
+                self._evento("despeje", 1 - eq, quita.nombre if quita else "")
+            elif ataque == "pasar":
+                self._evento("perdida", eq, tirador.nombre, otro=quita.nombre if quita else "", como="pase")
+            else:
+                self._evento("quite", 1 - eq, quita.nombre if quita else "", otro=tirador.nombre)
+            if defensa == "barrer" and defensor and sum(pd) / len(pd) < 0.3 and self.rng.random() < 0.5:
+                self._amonestar(1 - eq, defensor)   # llegó tarde al piso
+        else:
+            self._tiro(eq, tirador, asistente, jugada=tipo, calidad=si_pierde)
+        gol = self.goles[eq] > antes
+        self.momentos.append({"clase": clase, "eleccion": ataque, "defensa": defensa, "ataca": eq, "gana_ataque": gana_ataque,
+                              "barra": round(barra, 2), "gol": gol, "exito": gana_ataque if eq == self.interactivo else not gol,
                               "minuto": self.minuto, "tiempo": self.tiempo})
 
-    def _resolver_penal(self, pausa: dict, decision: dict):
-        _, eq, pateador = self._pendientes.pop(pausa["ref"])
-        pesos = [42, 16, 42]
-        ia = self.rng.choices(LADOS_PENAL, weights=pesos)[0]
-        tuyo = decision.get("lado") if decision.get("lado") in LADOS_PENAL else self.rng.choices(LADOS_PENAL, weights=pesos)[0]
-        lado, adivina = (tuyo, ia) if eq == self.interactivo else (ia, tuyo)
-        arquero = self.arquero(1 - eq)
-        sho = pateador.stat("SHO")
-        gk = arquero.stat("OVR") if arquero else 20
-        afuera = 0.0 if lado == "centro" else min(0.2, max(0.03, 0.12 - (sho - 70) * 0.004))
-        if self.rng.random() < afuera:
-            resultado = "desviado"
-        elif lado == adivina:
-            p_atajar = 0.85 if lado == "centro" else min(0.75, max(0.3, 0.55 + (gk - sho) * 0.01))
-            resultado = "atajada" if self.rng.random() < p_atajar else "gol"
+    def _amonestar(self, eq: int, j: EnCancha):
+        j.amarillas += 1
+        self.est[eq]["amarillas"] += 1
+        self.tarjetas.append({"equipo": eq, "jugador": j.nombre, "id": j.jugador.id, "tipo": "amarilla"})
+        if j.amarillas >= 2:
+            self._expulsar(eq, j, directa=False)
         else:
+            self._evento("amarilla", eq, j.nombre)
+
+    # --- penal: lado a ciegas; si el arquero adivina, se define con un pulso ------
+
+    def lado_ia(self, pausa: dict, rol: str) -> str:
+        return self._rng_pausa(pausa["ref"], "lado", rol).choices(LADOS_PENAL, weights=[42, 16, 42])[0]
+
+    def preparar_penal(self, pausa: dict, lado_pateador: str, lado_arquero: str) -> dict:
+        _, eq, pateador = self._pendientes[pausa["ref"]]
+        arquero = self.arquero(1 - eq)
+        lp = lado_pateador if lado_pateador in LADOS_PENAL else "izq"
+        la = lado_arquero if lado_arquero in LADOS_PENAL else "centro"
+        sho, gk = pateador.stat("SHO"), (arquero.stat("OVR") if arquero else 20)
+        nombre_lado = {"izq": "↖ Izquierda", "centro": "⬆ Al medio", "der": "↗ Derecha"}
+        datos = {"clase": "penal", "lado": lp, "adivina": la, "ataca": eq, "pulso": lp == la,
+                 "nombre_ataque": nombre_lado[lp], "nombre_defensa": nombre_lado[la],
+                 "gesto_ataque": "apuntar", "gesto_defensa": "reaccion", "decisivo": bool(pausa.get("decisivo")),
+                 "atacante": {"nombre": pateador.nombre, "stat": "TIR", "valor": round(sho)},
+                 "defensor": {"nombre": arquero.nombre if arquero else "", "stat": "🧤", "valor": round(gk)},
+                 "rondas": RONDAS_PULSO, "empuje": round(EMPUJE_PULSO * (EMPUJE_DECISIVO if pausa.get("decisivo") else 1), 3)}
+        if lp == la:   # el arquero fue al lado correcto: pulso (al medio con el arquero quieto, casi perdido)
+            inicio = 0.3 if lp == "centro" else sho / (sho + gk) - 0.05
+            datos.update(inicio=round(min(0.75, max(0.2, inicio)), 3), zona_ataque=zona(sho, gk - 5), zona_defensa=zona(gk, sho - 5))
+        return datos
+
+    def _resolver_penal(self, pausa: dict, decision: dict):
+        _, eq, pateador = self._pendientes[pausa["ref"]]
+        if self.duelos:
+            lp, la = decision.get("lado_pateador"), decision.get("lado_arquero")
+            pa, pd = precisiones(decision.get("prec_ataque")), precisiones(decision.get("prec_defensa"))
+        elif eq == self.interactivo:
+            lp, la = decision.get("lado"), self.lado_ia(pausa, "arquero")
+            pa, pd = precisiones(decision.get("precisiones")), None
+        else:
+            lp, la = self.lado_ia(pausa, "pateador"), decision.get("lado")
+            pa, pd = None, precisiones(decision.get("precisiones"))
+        prep = self.preparar_penal(pausa, lp, la)
+        self._pendientes.pop(pausa["ref"])
+        if prep["pulso"]:
+            if pa is None:
+                pa = self.precisiones_ia(pausa, "ataque", prep["atacante"]["valor"])
+            if pd is None:
+                pd = self.precisiones_ia(pausa, "defensa", prep["defensor"]["valor"])
+            barra = self.final_pulso(prep["inicio"], pa, pd, prep["empuje"])
+            resultado = "gol" if barra >= 0.5 else "atajada"
+        else:
+            barra = 1.0
             resultado = "gol"
         self._registrar_tiro(eq, pateador, None, resultado, penal=True, jugada="penal",
-                             extra={"lado": lado, "adivina": adivina})
-        if eq == self.interactivo:
-            self.momentos.append({"eleccion": "penal", "exito": resultado == "gol", "gol": resultado == "gol",
-                                  "minuto": self.minuto, "tiempo": self.tiempo})
-        else:
-            self.momentos.append({"eleccion": "atajar_penal", "exito": resultado != "gol", "gol": False,
-                                  "minuto": self.minuto, "tiempo": self.tiempo})
+                             extra={"lado": prep["lado"], "adivina": prep["adivina"]})
+        self.momentos.append({"eleccion": "penal", "ataca": eq, "gol": resultado == "gol", "barra": round(barra, 2),
+                              "exito": (resultado == "gol") == (eq == self.interactivo),
+                              "minuto": self.minuto, "tiempo": self.tiempo})
 
     def opciones_roja(self, eq: int, pausa: dict) -> list[dict]:
         """Hasta 2 suplentes para cubrir el puesto del expulsado (sale el más prescindible)."""
@@ -812,7 +1290,7 @@ class Simulacion:
             return []
         entran = sorted(self.banca[eq], key=lambda j: -j.carta.ovr * afinidad(j.carta.posicion, puesto))[:2]
         return [{"entra": j.id, "entra_nombre": j.nombre, "entra_pos": j.carta.posicion, "entra_ovr": j.carta.ovr,
-                 "entra_nivel": j.carta.nivel, "entra_club": j.carta.club,
+                 "entra_nivel": j.carta.nivel, "entra_club": j.carta.club, "entra_completo": j.carta.nombre,
                  "afinidad": round(100 * afinidad(j.carta.posicion, puesto)),
                  "sale": sale.jugador.id, "sale_nombre": sale.nombre, "sale_puesto": sale.puesto, "puesto": puesto}
                 for j in entran]
@@ -884,6 +1362,7 @@ class Simulacion:
             # en amistosos las amarillas no se acumulan (rojas y lesiones sí)
             tarjetas=[t for t in self.tarjetas if self.tipo != "amistoso" or t["tipo"] == "roja"],
             tipo=self.tipo,
+            quimica=[e.quimica for e in self.equipos],
         )
 
 
@@ -909,6 +1388,11 @@ def _razones_de(sim: "Simulacion", eq: int, est: list[dict]) -> list[list[str]]:
                 r.append(["🥅", "Convertiste tu penal" if m["gol"] else "Fallaste el penal"])
             elif m["eleccion"] == "atajar_penal":
                 r.append(["🧤", "¡Adivinaste y atajaste el penal!" if m["exito"] else "Te convirtieron el penal"])
+    q = sim.equipos[eq].quimica
+    if q and q["equipo"] <= 30:
+        r.append(["🧩", f"Poca química ({q['equipo']}): tu once rindió {round(100 * (1 - (0.96 + 0.0009 * q['equipo'])), 1)}% menos"])
+    elif q and q["equipo"] >= 70:
+        r.append(["🤝", f"Química {q['equipo']}: tu once jugó de memoria (+{round(100 * (0.0009 * q['equipo'] - 0.04), 1)}%)"])
     cambios = [c for c in sim.cambios_tactica if c["equipo"] == eq]
     if cambios:
         c = cambios[-1]

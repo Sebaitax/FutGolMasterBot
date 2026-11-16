@@ -116,12 +116,13 @@ class TestJuego(_Base):
 
     def test_sobres_y_venta(self):
         p = self.nueva()
+        p._mover_monedas(SOBRES["premium"]["precio"] - 1 - p.monedas, "test")
         with self.assertRaises(ErrorJuego):
-            p.abrir_sobre("oro")  # no alcanza
+            p.abrir_sobre("premium")  # no alcanza
         antes = p.monedas
-        nuevos = p.abrir_sobre("bronce")
-        self.assertEqual(len(nuevos), SOBRES["bronce"]["cartas"])
-        self.assertEqual(p.monedas, antes - SOBRES["bronce"]["precio"])
+        nuevos = p.abrir_sobre("basico")
+        self.assertEqual(len(nuevos), SOBRES["basico"]["cartas"])
+        self.assertEqual(p.monedas, antes - SOBRES["basico"]["precio"])
         vendida = max(p.plantel(), key=lambda f: f.carta.precio if f.carta.posicion != "GK" else 0)
         p.vender(vendida.pid)
         self.assertNotIn(vendida.pid, [f.pid for f in p.plantel()])
@@ -153,7 +154,7 @@ class TestNuevo(_Base):
         with self.assertRaises(ErrorJuego):
             p.jugar_fecha()  # hay un partido en curso
         r = p.avanzar_partido(desde=0)
-        self.assertIn(r["pausa"]["tipo"], ("descanso", "roja"))
+        self.assertIn(r["pausa"]["tipo"], ("descanso", "roja", "ocasion", "defensa", "penal"))
         lineas = [l["texto"] for l in r["lineas"]]
         modulo._SESIONES.clear()  # simula que el servidor se reinició
         r2 = p.avanzar_partido(desde=0)
@@ -225,10 +226,15 @@ class TestNuevo(_Base):
         self.assertEqual(quimica("4-3-3", mismos)["equipo"], 100)
         distintos = [Carta(c.nombre, c.posicion, 70, club=str(i), nacion=str(i)) for i, c in enumerate(mismos)]
         self.assertEqual(quimica("4-3-3", distintos)["equipo"], 0)
+        # misma liga: medio enlace; misma liga y misma nación: enlace completo
+        misma_liga = [Carta(c.nombre, c.posicion, 70, club=str(i), nacion=str(i), liga="L") for i, c in enumerate(mismos)]
+        self.assertEqual(quimica("4-3-3", misma_liga)["equipo"], 50)
+        liga_y_nacion = [Carta(c.nombre, c.posicion, 70, club=str(i), nacion="X", liga="L") for i, c in enumerate(mismos)]
+        self.assertEqual(quimica("4-3-3", liga_y_nacion)["equipo"], 100)
         self.assertTrue(all(len(ENLACES[f]) >= 10 for f in ENLACES))
         p = self.nueva()
         e = p._equipo_usuario()
-        self.assertTrue(all(0.97 <= j.quimica <= 1.03 for j in e.titulares))
+        self.assertTrue(all(0.96 <= j.quimica <= 1.05 for j in e.titulares))
 
     def test_mercado(self):
         p = self.nueva()
@@ -255,7 +261,7 @@ class TestNuevo(_Base):
 
     def test_venta_y_deshacer(self):
         p = self.nueva()
-        p.abrir_sobre("bronce")
+        p.abrir_sobre("basico")
         monedas, n = p.monedas, len(p.plantel())
         pids = [f.pid for f in p.plantel() if f.carta.posicion != "GK"][:2]
         p.vender_varios(pids)
@@ -281,7 +287,7 @@ class TestNuevo(_Base):
         p = self.nueva()
         p._mover_monedas(200000, "test")
         for _ in range(10):
-            nuevas = [f.carta_id for f in p.abrir_sobre("plata")]
+            nuevas = [f.carta_id for f in p.abrir_sobre("super")]
             self.assertEqual(len(nuevas), len(set(nuevas)))
 
     def test_mejora_con_repetida(self):
@@ -350,6 +356,91 @@ class TestNuevo(_Base):
         self.assertTrue(all(f["pj"] == 0 for f in p.tabla()))
         self.assertEqual(p.estadisticas_club()["record"]["amistoso"]["pj"], 1)
 
+    def test_elegir_jugada_en_vivo(self):
+        """Eliges la jugada clave: se revela lo del rival y el pulso; la elección no se puede cambiar."""
+        p = self.nueva(3)
+        p.iniciar_partido()
+        r = p.avanzar_partido(desde=0)
+        vistas = 0
+        while not r["final"]:
+            pa = r["pausa"]
+            if pa["tipo"] in ("ocasion", "defensa", "penal"):
+                el = {"ocasion": "pasar", "defensa": "barrer", "penal": "der"}[pa["tipo"]]
+                prep = p.elegir_jugada(el)
+                otra = p.elegir_jugada({"ocasion": "tirar", "defensa": "cerrar", "penal": "izq"}[pa["tipo"]])
+                self.assertEqual(prep, otra)   # ya elegiste: no se puede tantear
+                if prep.get("pulso", True):
+                    self.assertEqual(len(prep["toques_rival"]), 3)
+                vistas += 1
+                d = {"eleccion": el, "lado": el, "precisiones": [0.6] * 3}
+            elif pa["tipo"] == "roja":
+                o = pa["opciones"][0]
+                d = {"entra": o["entra"], "sale": o["sale"]}
+            else:
+                d = {}
+            r = p.avanzar_partido(d, desde=r["eventos"])
+        self.assertGreater(vistas, 0)
+        with self.assertRaises(ErrorJuego):
+            p.elegir_jugada("tirar")
+
+    def test_amigo_en_mi_liga(self):
+        def con_divisiones(semilla):
+            p = Partida(conectar(":memory:"))
+            self.addCleanup(p.con.close)
+            p.crear("Mi Club", semilla=semilla, catalogo=self.catalogo, divisiones=3)
+            return p
+        yo, amigo = con_divisiones(1), con_divisiones(2)
+        self.assertEqual(yo.n_divisiones, 3)
+        amigo.con.execute("UPDATE equipos SET nombre = 'Club Amigo' WHERE id = ?", (amigo.usuario_id,))
+        datos = {**amigo.exportar_equipo(), "division": amigo.clave_division()}
+        rivales_antes = {e["id"] for e in yo.con.execute("SELECT id FROM equipos WHERE division = 0 AND es_usuario = 0")}
+        mapa = yo.sincronizar_liga_amigos({"abc": datos})
+        eid = mapa["abc"]
+        self.assertIn(eid, rivales_antes)                      # toma el lugar de un bot de mi división
+        self.assertEqual(yo.equipo(eid)["nombre"], "Club Amigo")
+        self.assertIn("Club Amigo", [f["nombre"] for f in yo.tabla()])
+        once_amigo = {j.carta.nombre for j in amigo._equipo_usuario().titulares}
+        self.assertEqual({j.carta.nombre for j in yo.armar(eid).titulares}, once_amigo)  # juega con su once
+        # se juega la fecha con él adentro
+        yo.jugar_fecha()
+        # si el amigo sube a Plata, el bot vuelve
+        mapa = yo.sincronizar_liga_amigos({"abc": {**datos, "division": "plata"}})
+        self.assertEqual(mapa, {})
+        self.assertNotEqual(yo.equipo(eid)["nombre"], "Club Amigo")
+        self.assertFalse(yo._es_amigo(eid))
+
+    def test_desafio_a_un_amigo(self):
+        yo, amigo = self.nueva(semilla=1), self.nueva(semilla=2)
+        amigo.con.execute("UPDATE equipos SET nombre = 'Club Amigo' WHERE id = ?", (amigo.usuario_id,))
+        # el amigo mejora a su mejor titular: la copia debe traer la mejora
+        mejor = max((f for f in amigo.plantel() if f.puesto is not None and f.puesto < 11), key=lambda f: f.carta.ovr)
+        amigo.con.execute("UPDATE plantilla SET nivel = 3 WHERE id = ?", (mejor.pid,))
+        datos = amigo.exportar_equipo()
+        anotados = []
+        yo.al_terminar_desafio = lambda a, r: anotados.append((a, r))
+        bots_antes = len(yo.clubes())
+        pid = yo.desafiar("abc", datos)
+        r = yo.avanzar_partido(desde=0)
+        while not r["final"]:
+            pausa = r["pausa"]
+            d = {"entra": pausa["opciones"][0]["entra"], "sale": pausa["opciones"][0]["sale"]} if pausa["tipo"] == "roja" else {}
+            r = yo.avanzar_partido(d, desde=r["eventos"])
+        yo.avanzar_partido(desde=r["eventos"], terminar=True)
+        self.assertTrue(yo.partido(pid)["jugado"])
+        self.assertEqual(len(anotados), 1)
+        amigo_id, res = anotados[0]
+        self.assertEqual(amigo_id, "abc")
+        self.assertEqual(res["goles"] + res["goles_rival"], sum(yo.partido(pid)[k] for k in ("goles_local", "goles_visita")))
+        # su club no se mete en la liga ni en el mercado, y se arma con su once (con la mejora)
+        self.assertEqual(len(yo.clubes()), bots_antes)
+        eid = yo._get("amigos")["abc"]
+        once = yo.armar(eid).titulares
+        self.assertIn(mejor.carta.ovr + 2, [j.carta.ovr for j in once if j.carta.nombre == mejor.carta.nombre])
+        self.assertEqual(yo.fecha, 1)
+        # volver a desafiarlo actualiza la misma copia
+        yo.desafiar("abc", datos)
+        self.assertEqual(yo._get("amigos")["abc"], eid)
+
     def test_objetos_de_coleccion(self):
         p = self.nueva()
         escudos = [o for o in p.coleccion() if o["tipo"] == "escudo"]
@@ -357,7 +448,7 @@ class TestNuevo(_Base):
         p._mover_monedas(10**6, "test")
         obtenidos = []
         for _ in range(40):
-            obtenidos += p.abrir_sobre_completo("oro")["objetos"]
+            obtenidos += p.abrir_sobre_completo("premium")["objetos"]
         self.assertTrue(obtenidos)
         ids = [o["id"] for o in obtenidos]
         self.assertEqual(len(ids), len(set(ids)))  # nunca uno que ya tienes

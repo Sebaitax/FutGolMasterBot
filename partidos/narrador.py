@@ -171,6 +171,32 @@ SIMPLES = {
         "¡Se viene! {jug} recibe en zona de peligro…",
         "¡Ojo! {jug} se perfila en el área…",
     ],
+    "peligro": [
+        "¡Cuidado! {jug} se escapa hacia tu arco…",
+        "¡Peligro! {jug} queda mano a mano…",
+        "¡Ojo atrás! {jug} arranca con espacio…",
+    ],
+    "corner": [
+        "Córner para {equipo}. {jug} va a buscar la pelota…",
+        "¡Córner! {jug} se acomoda para el centro…",
+    ],
+    "tiro_libre": [
+        "Tiro libre peligroso para {equipo}. {jug} se para frente a la pelota…",
+        "Falta en la puerta del área: {jug} acomoda la pelota…",
+    ],
+    "despeje": [
+        "¡La despeja {jug}! Se salvaron.",
+        "¡Rechaza {jug}! No pasó nada.",
+    ],
+    "quite": [
+        "¡Qué cruce de {jug}! Le saca la pelota limpia a {otro}.",
+        "¡{jug} se tira al piso y se la quita a {otro}! Salvada.",
+        "¡Barrida perfecta de {jug}! {otro} se queda sin nada.",
+    ],
+    "leida": [
+        "Ya lo venían esperando: repetiste la jugada y la leyeron.",
+        "¡Se la sabían! Hicieron lo mismo que la vez anterior.",
+    ],
     "perdida_pase": [
         "{jug} intenta el pase a {otro}, pero la defensa lo corta.",
         "{jug} busca a {otro}… ¡interceptado!",
@@ -203,10 +229,44 @@ RELLENO = [
     "Ritmo intenso, ida y vuelta en ambas áreas.",
 ]
 
+# química (solo equipos armados por usuarios; los bots no tienen)
+QUIMICA = {
+    "alta": [
+        "🤝 {equipo} sale con un once que se conoce de memoria (química {q}).",
+        "🤝 Ojo con {equipo}: estos jugadores se entienden con los ojos cerrados (química {q}).",
+        "🤝 {equipo} llega aceitado, se nota que juegan juntos hace rato (química {q}).",
+    ],
+    "baja": [
+        "🧩 {equipo} arma un once de jugadores de muchos lados… a ver si se entienden (química {q}).",
+        "🧩 Poca química en {equipo}: hay nombres, pero no se conocen (química {q}).",
+        "🧩 {equipo} sale con un rompecabezas: talento suelto y poco entendimiento (química {q}).",
+    ],
+    "socios_gol": [
+        "¡Se entienden de memoria {asis} y {tir}!",
+        "¡Química pura entre {asis} y {tir}!",
+        "¡Esa sociedad {asis}-{tir} es un reloj!",
+    ],
+    "perdida": [
+        "Se nota la falta de química en {equipo}.",
+        "No se entienden: {equipo} sigue descoordinado.",
+        "Otra vez el pase a ninguna parte… le falta química a {equipo}.",
+    ],
+    "relleno_baja": [
+        "{equipo} no encuentra sociedades, cada uno juega por su cuenta.",
+        "Mucho pase errado en {equipo}: se nota que recién se conocen.",
+        "Los de {equipo} se miran entre ellos, no terminan de entenderse.",
+    ],
+    "relleno_alta": [
+        "{equipo} toca de primera, como si jugaran juntos desde siempre.",
+        "Paredes y triangulaciones de {equipo}: la química se nota.",
+    ],
+}
+QUIMICA_ALTA, QUIMICA_BAJA = 70, 35
+
 EMOJI = {
     "gol": "⚽", "atajada": "🧤", "desviado": "💨", "palo": "🥅", "falta": "⚠️",
     "amarilla": "🟨", "roja": "🟥", "lesion": "🚑", "cambio": "🔄", "al_arco": "🧤",
-    "penal": "❗", "adicion": "⏱️", "relleno": "🎙️", "momento": "🎯", "perdida": "❌", "tactica": "🧠",
+    "penal": "❗", "adicion": "⏱️", "relleno": "🎙️", "momento": "🎯", "perdida": "❌", "peligro": "🚨", "quite": "🧱", "leida": "👀", "pulso": "💪", "corner": "🚩", "tiro_libre": "🎯", "despeje": "🦶", "tactica": "🧠",
 }
 
 
@@ -265,6 +325,16 @@ class Narrador:
             return f"{preparacion} {final}"
         return preparacion + final
 
+    def _quimica(self, eq: int) -> dict | None:
+        q = getattr(self.r, "quimica", None) or [None, None]
+        return q[eq] if 0 <= eq < len(q) else None
+
+    def _nivel_quimica(self, eq: int) -> str:
+        q = self._quimica(eq)
+        if not q:
+            return ""
+        return "alta" if q["equipo"] >= QUIMICA_ALTA else "baja" if q["equipo"] <= QUIMICA_BAJA else ""
+
     def _contexto_gol(self, ev: Evento) -> str:
         eq, (g0, g1) = ev.equipo, ev.datos["marcador"]
         propios, rivales = (g0, g1) if eq == 0 else (g1, g0)
@@ -302,6 +372,9 @@ class Narrador:
                 if d.get("lado") in LADO and d.get("adivina") in LADO else "")
         if ev.tipo == "gol":
             texto = self._jugada(ev, "gol", ev.jugador, d.get("portero", ""))
+            q, asis = self._quimica(ev.equipo), d.get("asistente")
+            if q and asis and asis in q["socios"].get(ev.jugador, []):
+                texto += " " + self._elige(QUIMICA["socios_gol"], asis=asis, tir=ev.jugador)
             return Linea(m, f"{texto}{lado} {self._contexto_gol(ev)}", "gol")
         if ev.tipo == "atajada":
             return Linea(m, self._jugada(ev, "atajada", d.get("tirador", ""), ev.jugador) + lado, "atajada")
@@ -325,14 +398,32 @@ class Narrador:
             return Linea(m, self._elige(SIMPLES[clave], jug=ev.jugador, sale=d.get("sale", ""), equipo=equipo), "cambio")
         if ev.tipo == "tactica":
             return Linea(m, TACTICA.get(d.get("tactica"), "").format(equipo=equipo), "tactica")
+        if ev.tipo == "pulso":
+            jugada = {"tirar": "el remate", "pasar": "el pase", "gambetear": "la gambeta", "primer_palo": "el centro al primer palo",
+                      "segundo_palo": "el centro al segundo palo", "corto": "la jugada corta", "directo": "el remate directo",
+                      "centro": "el centro", "ensayada": "la jugada ensayada"}.get(d["ataque"], "la jugada")
+            freno = {"barrer": "la barrida", "achicar": "la salida del arquero", "cerrar": "la marca", "marcar": "la marca",
+                     "zona": "la defensa en zona", "salir": "la salida del arquero", "barrera": "la barrera",
+                     "saltar": "la barrera que salta"}.get(d["defensa"], "la defensa")
+            if d.get("decisivo"):
+                jugada += " (¡en el momento decisivo!)"
+            if d.get("gana"):
+                texto = f"¡{ev.jugador} gana el pulso! {jugada.capitalize()} supera a {freno}."
+            else:
+                texto = f"¡{freno.capitalize()} gana el pulso contra {jugada} de {ev.jugador}!"
+            return Linea(m, texto, "pulso")
         if ev.tipo == "perdida":
             clave = "perdida_gambeta" if d.get("como") == "gambeta" else "perdida_pase"
-            return Linea(m, self._elige(SIMPLES[clave], jug=ev.jugador, otro=d.get("otro", "")), "perdida")
+            texto = self._elige(SIMPLES[clave], jug=ev.jugador, otro=d.get("otro", ""))
+            if clave == "perdida_pase" and self._nivel_quimica(ev.equipo) == "baja" and self.rng.random() < 0.5:
+                texto += " " + self._elige(QUIMICA["perdida"], equipo=equipo)
+            return Linea(m, texto, "perdida")
         if ev.tipo == "adicion":
             n = d["minutos"]
             return Linea(m, self._elige(SIMPLES["adicion"], min_add=f"{n} minuto{'s' if n != 1 else ''}", n="n" if n != 1 else ""), "adicion")
         if ev.tipo in SIMPLES:
-            return Linea(m, self._elige(SIMPLES[ev.tipo], jug=ev.jugador, equipo=equipo, dias=d.get("dias", "")), ev.tipo)
+            return Linea(m, self._elige(SIMPLES[ev.tipo], jug=ev.jugador, equipo=equipo, dias=d.get("dias", ""),
+                                        otro=d.get("otro", "")), ev.tipo)
         return None
 
     def _relleno_entre(self, previo: Evento, ev: Evento) -> Linea | None:
@@ -342,13 +433,18 @@ class Narrador:
         minuto = self.rng.randint(previo.minuto + 2, ev.minuto - 2)
         pos = [max(e["posesion"], 1) for e in self.r.estadisticas]
         eq = self.rng.choices([0, 1], weights=pos)[0]
-        texto = self._elige(RELLENO, equipo=self.r.equipos[eq])
+        nivel = self._nivel_quimica(eq)
+        if nivel and self.rng.random() < 0.4:
+            texto = self._elige(QUIMICA["relleno_" + nivel], equipo=self.r.equipos[eq])
+        else:
+            texto = self._elige(RELLENO, equipo=self.r.equipos[eq])
         return Linea(f"{minuto}'", texto, "relleno", minuto, ev.tiempo, eq)
 
     def tramo(self, desde: int = 0, hasta: int | None = None) -> list[Linea]:
         """Narra los eventos [desde:hasta]. Permite narrar el partido por partes (en vivo)."""
         l, v = self.r.equipos
         lineas: list[Linea] = []
+        desde = max(0, min(desde, len(self.r.eventos)))
         previo = self.r.eventos[desde - 1] if desde > 0 else None
         for ev in self.r.eventos[desde:hasta]:
             if previo is not None and ev.tipo not in ("descanso", "final", "adicion"):
@@ -358,8 +454,13 @@ class Narrador:
             previo = ev
             marcador = list(ev.datos.get("marcador", (0, 0)))
             if ev.tipo == "inicio":
-                tipo = "Liga rankeada" if self.r.tipo == "liga" else "Amistoso"
+                tipo = {"liga": "Liga rankeada", "escalera": "Partido por copas 🏆"}.get(self.r.tipo, "Amistoso")
                 lineas.append(Linea("", f"🏟️ **{l} 🆚 {v}** · {tipo}\n⏳ ¡Rueda la pelota!", "inicio", 0, 1))
+                for eq in (0, 1):
+                    nivel = self._nivel_quimica(eq)
+                    if nivel:
+                        lineas.append(Linea("1'", self._elige(QUIMICA[nivel], equipo=self.r.equipos[eq], q=self._quimica(eq)["equipo"]),
+                                            "relleno", 1, 1, eq))
                 continue
             if ev.tipo == "descanso":
                 lineas.append(Linea("", f"⏸️ **Descanso:** {self._marcador(marcador)}", "descanso", ev.minuto, 1,

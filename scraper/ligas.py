@@ -1,10 +1,12 @@
 """Configuración de cada liga: de dónde salen los datos y cómo se juega.
 
-Para sumar una liga nueva basta con agregar una entrada acá y correr:
-    python -m scraper.plantillas --liga <clave>
-    python -m scraper.estadisticas --liga <clave>
+Para sumar una liga nueva: agregar una entrada acá, su id de 365Scores en
+scraper/fotos_365.py (COMPETICION) y correr:
+    python -m scraper.liga_365 --liga <clave>
     python -m cartas.valoracion --liga <clave>
-    python -m scraper.fotos --liga <clave> --recortar
+    python -m scraper.fotos_365 --liga <clave>
+    python -m scraper.fotos_365 --liga <clave> --escudos
+(Los scripts antiguos scraper.plantillas / scraper.estadisticas usan Wikipedia y quedan como respaldo.)
 """
 
 LIGAS = {
@@ -59,6 +61,43 @@ LIGAS = {
         "tabla": "modulo",
         "ovr": {"media": 68.0, "desv": 6.0, "min": 52, "max": 89},
         "vueltas": 2,                # 20 equipos ida y vuelta = 38 fechas
+    },
+    # ligas que salen solo de 365Scores (planteles, estadísticas, fotos y escudos)
+    "espana": {
+        "nombre": "LaLiga",
+        "pais": "España",
+        "ovr": {"media": 71.0, "desv": 6.0, "min": 55, "max": 91},
+        "vueltas": 2,
+    },
+    "inglaterra": {
+        "nombre": "Premier League",
+        "pais": "Inglaterra",
+        "ovr": {"media": 72.0, "desv": 6.0, "min": 56, "max": 91},
+        "vueltas": 2,
+    },
+    "italia": {
+        "nombre": "Serie A",
+        "pais": "Italia",
+        "ovr": {"media": 70.5, "desv": 6.0, "min": 55, "max": 90},
+        "vueltas": 2,
+    },
+    "alemania": {
+        "nombre": "Bundesliga",
+        "pais": "Alemania",
+        "ovr": {"media": 70.5, "desv": 6.0, "min": 55, "max": 91},
+        "vueltas": 2,
+    },
+    "francia": {
+        "nombre": "Ligue 1",
+        "pais": "Francia",
+        "ovr": {"media": 69.5, "desv": 6.0, "min": 54, "max": 89},
+        "vueltas": 2,
+    },
+    "mls": {
+        "nombre": "MLS",
+        "pais": "Estados Unidos",
+        "ovr": {"media": 64.0, "desv": 6.0, "min": 50, "max": 87},
+        "vueltas": 1,
     },
 }
 

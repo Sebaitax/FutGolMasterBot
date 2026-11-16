@@ -67,10 +67,11 @@ class Carta:
     liga: str = ""
     precio: int = 0
     rara: bool = False
+    ovr_original: int = 0   # media antes de mejorarla: el color (bronce/plata/oro) no cambia al mejorar
 
     @property
     def nivel(self) -> str:
-        return nivel_por_ovr(self.ovr)
+        return nivel_por_ovr(self.ovr_original or self.ovr)
 
     @property
     def nombre_corto(self) -> str:
